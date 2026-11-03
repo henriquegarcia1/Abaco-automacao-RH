@@ -1,0 +1,11 @@
+# Dependências do programa de Automação Ábaco + Excel.
+#
+# A forma mais fácil de instalar é abrir o programa e usar a opção [1].
+# Mas, se preferir instalar na mão, rode:
+#
+#     pip install -r requirements.txt
+#     python -m playwright install chromium
+#
+playwright==1.63.0
+pandas
+openpyxl
