@@ -38,7 +38,11 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-PASTA = Path(__file__).resolve().parent
+# Empacotado pelo PyInstaller (AutomacaoAbaco.exe): o Python e as bibliotecas
+# vêm dentro do programa, e não há "python" no computador.
+EMPACOTADO = bool(getattr(sys, "frozen", False))
+# config.json, entrada/ e saida/ ficam ao lado do programa (.py ou .exe)
+PASTA = (Path(sys.executable) if EMPACOTADO else Path(__file__)).resolve().parent
 CONFIG = PASTA / "config.json"
 
 PADRAO = {
@@ -47,6 +51,7 @@ PADRAO = {
     "planilha": "dados.xlsx",
     "relatorio": "relatorio_observacao",       # gera .json e .md
     "mostrar_navegador": True,
+    "reproduzir_devagar": False,               # pausa de 0,6 s entre ações
     "pasta_entrada": "entrada",                # relatórios do mês
     "pasta_saida": "saida",                    # planilhas geradas
     # Conferir: seletores da tela de consulta do servidor na Ábaco.
@@ -205,7 +210,7 @@ def abrir_no_sistema(caminho):
 
 
 # ==========================================================================
-# Instalação (o Python em si é instalado pelo INICIAR.bat)
+# Instalação (o Python em si é instalado pelo INICIAR.bat ou vem no .exe)
 # ==========================================================================
 def _python_console():
     """python.exe ao lado do pythonw.exe (para os subprocessos terem saída)."""
@@ -214,10 +219,22 @@ def _python_console():
     return str(alt if exe.name.lower() == "pythonw.exe" and alt.exists() else exe)
 
 
-def _rodar(comando, ui):
+def _comando_playwright(*args):
+    """(comando, ambiente) para o motor do Playwright (node + cli.js), que vem
+    junto com a biblioteca. É o que o "python -m playwright" faz por baixo, e
+    funciona também no .exe, sem Python instalado."""
+    from playwright._impl._driver import compute_driver_executable, get_driver_env
+    node, cli = compute_driver_executable()
+    if not Path(node).exists():
+        raise RuntimeError("O motor do navegador (Playwright) não foi encontrado. "
+                           "Reinstale o programa.")
+    return [node, cli, *args], get_driver_env()
+
+
+def _rodar(comando, ui, env=None):
     """Roda um comando mostrando a saída linha a linha. Devolve o código."""
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    env = dict(os.environ, PYTHONIOENCODING="utf-8")
+    env = dict(env or os.environ, PYTHONIOENCODING="utf-8")
     proc = subprocess.Popen(comando, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True,
                             encoding="utf-8", errors="replace",
@@ -282,16 +299,19 @@ def navegador_instalado():
 
 
 def instalar_dependencias(ui):
-    py = _python_console()
-    ui.log(">> Instalando bibliotecas Python...")
-    codigo = _rodar([py, "-m", "pip", "install", "-r",
-                     str(PASTA / "requirements.txt"), "--prefer-binary",
-                     "--disable-pip-version-check", "--no-input"], ui)
-    if codigo != 0:
-        raise RuntimeError(f"A instalação das bibliotecas falhou (código {codigo}). "
-                           f"Verifique a internet e tente de novo.")
+    if EMPACOTADO:
+        ui.log("As bibliotecas já vêm dentro do programa (AutomacaoAbaco.exe).")
+    else:
+        ui.log(">> Instalando bibliotecas Python...")
+        codigo = _rodar([_python_console(), "-m", "pip", "install", "-r",
+                         str(PASTA / "requirements.txt"), "--prefer-binary",
+                         "--disable-pip-version-check", "--no-input"], ui)
+        if codigo != 0:
+            raise RuntimeError(f"A instalação das bibliotecas falhou (código "
+                               f"{codigo}). Verifique a internet e tente de novo.")
     ui.log(">> Baixando o navegador controlado (Chromium)...")
-    codigo = _rodar([py, "-m", "playwright", "install", "chromium"], ui)
+    comando, env = _comando_playwright("install", "chromium")
+    codigo = _rodar(comando, ui, env)
     if codigo != 0:
         _, nome = navegador_do_windows()
         if not nome:
@@ -303,18 +323,20 @@ def instalar_dependencias(ui):
     ui.log("Instalação concluída.")
 
 
-def abrir_navegador(p, cfg):
+def abrir_navegador(p, cfg, devagar=0, visivel=False):
     """Abre o Chromium do Playwright; se ele faltar ou não abrir, usa o
-    Edge/Chrome do Windows. Sem nenhum, explica em vez de quebrar."""
-    headless = not cfg["mostrar_navegador"]
+    Edge/Chrome do Windows. Sem nenhum, explica em vez de quebrar.
+    devagar: pausa em ms entre as ações (para acompanhar o robô)."""
+    headless = not (visivel or cfg["mostrar_navegador"])
     try:
-        return p.chromium.launch(headless=headless)
+        return p.chromium.launch(headless=headless, slow_mo=devagar)
     except Exception as e:
         erro = e
     canal, _ = navegador_do_windows()
     if canal:
         try:
-            return p.chromium.launch(channel=canal, headless=headless)
+            return p.chromium.launch(channel=canal, headless=headless,
+                                     slow_mo=devagar)
         except Exception:
             pass
     if "Executable doesn't exist" in str(erro):
@@ -594,17 +616,646 @@ def gravar(cfg, ui):
     saida = PASTA / cfg["arquivo_fluxo"]
     ui.log(f"Gravando em {saida}. Faça login, execute a tarefa UMA vez e "
            f"FECHE o navegador ao terminar.")
-    comando = [_python_console(), "-m", "playwright", "codegen",
-               "--target", "python", "--output", str(saida)]
+    comando, env = _comando_playwright("codegen", "--target", "python",
+                                       "--output", str(saida))
     canal, nome = navegador_do_windows()
     if canal and not chromium_baixado():
         ui.log(f"Chromium não baixado; gravando com o {nome}.")
         comando += ["--channel", canal]
-    codigo = _rodar(comando + [cfg["url_abaco"]], ui)
+    codigo = _rodar(comando + [cfg["url_abaco"]], ui, env)
     if codigo != 0:
         raise RuntimeError(f"A gravação terminou com problema (código {codigo}).")
     ui.log(f"Fluxo salvo em: {saida}")
     return saida
+
+
+# ---- REPRODUZIR UM FLUXO GRAVADO (para testar a gravação)
+# linhas do fluxo que o reprodutor ignora: abrir/fechar o navegador
+_IGNORAR = ("browser =", "context =", "page = context.new_page", "context.close(",
+            "browser.close(", "page.close(", "#")
+# o que marca um passo da tela de login do e-Turmalina
+_LOGIN = ("vUSULOGIN", "vUSUSENHA", "ENTRAR", "hwlogin")
+# senhas que não são senha (o arquivo foi "limpo")
+_SENHA_FALSA = {"", "senha", "********", "sua senha", "xxx", "xxxx"}
+
+
+def _comandos_do_fluxo(texto):
+    """Os comandos de dentro de run() de um fluxo gravado pelo Playwright,
+    agrupados (um 'with ...:' leva junto as linhas de dentro), sem os de
+    abrir/fechar o navegador."""
+    linhas = texto.splitlines()
+    try:
+        ini = next(i for i, l in enumerate(linhas) if l.startswith("def run("))
+    except StopIteration:
+        raise RuntimeError("Este arquivo não parece um fluxo gravado (falta "
+                           "'def run(').")
+    passos = []
+    for l in linhas[ini + 1:]:
+        if l.strip() and not l.startswith(" "):
+            break                               # acabou o corpo de run()
+        if not l.strip():
+            continue
+        recuo = len(l) - len(l.lstrip())
+        if recuo > 4 and passos:
+            passos[-1] += "\n" + l[4:]          # continuação de um 'with'
+        else:
+            passos.append(l.strip())
+    return [p for p in passos if not p.startswith(_IGNORAR)]
+
+
+def separar_fluxo(texto):
+    """Divide o fluxo em (login, passos). Tudo até o ÚLTIMO comando da tela
+    de login (inclusive cliques soltos que a pessoa deu nela, como numa
+    célula da tabela do formulário) é login; o resto são os passos."""
+    comandos = _comandos_do_fluxo(texto)
+    ult = -1
+    for i, c in enumerate(comandos):
+        if any(x in c for x in _LOGIN):
+            ult = i
+    return comandos[:ult + 1], comandos[ult + 1:]
+
+
+def passos_do_fluxo(texto):
+    """Só os passos de depois do login."""
+    return separar_fluxo(texto)[1]
+
+
+def _senha_do_login(login):
+    import re as _re
+    for c in login:
+        if "vUSUSENHA" in c:
+            m = _re.search(r'\.fill\((["\'])(.*)\1\)', c)
+            if m:
+                return m.group(2)
+    return None
+
+
+def reproduzir_fluxo(cfg, ui, arquivo=None, esperar_fechar=True, devagar=None):
+    """Repete, num navegador visível, um fluxo gravado. Se a senha está no
+    arquivo, o robô faz o login; senão espera a pessoa fazer. Depois repete os
+    passos. Se precisar procurar algum item (submenu que abre passando o
+    mouse, menu que mudou), grava um <fluxo>_corrigido.py com o caminho certo,
+    que é usado sozinho nas próximas vezes. Downloads vão para reproducao/.
+    devagar: pausa de 0,6 s entre as ações, para acompanhar (padrão: config).
+    Atenção: age no sistema real (use só fluxos de consulta e relatório)."""
+    import re as _re
+    import time
+    sync_playwright = _playwright()
+    from playwright.sync_api import expect as _expect
+
+    arq = Path(arquivo) if arquivo else PASTA / cfg["arquivo_fluxo"]
+    if not arq.exists():
+        raise RuntimeError(f"Fluxo não encontrado: {arq}")
+    corrigido = _nome_corrigido(arq)
+    if corrigido != arq and corrigido.exists() \
+            and corrigido.stat().st_mtime >= arq.stat().st_mtime:
+        ui.log(f"Usando a versão já corrigida: {corrigido.name}")
+        arq = corrigido
+    login, passos = separar_fluxo(arq.read_text(encoding="utf-8", errors="replace"))
+    if not passos:
+        raise RuntimeError("O fluxo não tem passos depois do login.")
+    perigosos = [p for p in passos if _re.search(
+        r"(?i)importar|confirmar|salvar|excluir|processar|gerar benef|estornar|incluir",
+        p)]
+    if perigosos:
+        r = ui.perguntar("Este fluxo tem passos que podem ALTERAR dados no sistema "
+                         "real:\n" + "\n".join(f"• {p[:90]}" for p in perigosos[:5])
+                         + "\n\nReproduzir mesmo assim?", ["Cancelar", "Reproduzir"])
+        if r != "Reproduzir":
+            ui.log("Reprodução cancelada.")
+            return None
+    if devagar is None:
+        devagar = bool(cfg.get("reproduzir_devagar", False))
+    destino = PASTA / "reproducao"
+    ui.log(f"Reproduzindo {arq.name}: {len(passos)} passo(s) depois do login"
+           f" ({'devagar' if devagar else 'rápido'}).")
+    resultado = {"salvos": [], "parou": None, "passos": len(passos),
+                 "corrigido": None}
+    vistos = set()
+    correcoes = {}                      # índice do passo -> linhas novas
+    inicio = time.time()
+
+    with sync_playwright() as p:
+        navegador = abrir_navegador(p, cfg, devagar=600 if devagar else 80,
+                                    visivel=True)
+        context = navegador.new_context(accept_downloads=True)
+        page = context.new_page()
+        page.set_default_timeout(20000)
+        try:
+            page.goto(cfg["url_abaco"])
+            _fazer_login(page, ui, login)
+            ns = {"page": page, "context": context, "browser": navegador,
+                  "re": _re, "expect": _expect, **_AJUDANTES}
+            for i, passo in enumerate(passos, 1):
+                if ui.cancelado:
+                    raise Cancelado()
+                ui.log(f"{i:3}/{len(passos)}  {passo.splitlines()[0][:110]}")
+                # clique simples: 1ª tentativa curta; se não achar, procura
+                curto = _alvo_do_clique(passo) is not None
+                try:
+                    _rodar_passo(page, passo, ns, 6000 if curto else None)
+                except Exception as e:
+                    erro = e
+                    # a sessão caiu no meio? entra de novo e tenta o passo outra vez
+                    if _na_tela_de_login(page):
+                        ui.log("   O sistema voltou para a tela de login.")
+                        try:
+                            _fazer_login(page, ui, login)
+                            _rodar_passo(page, passo, ns)
+                            erro = None
+                        except Exception as e2:
+                            erro = e2
+                    # o elemento não apareceu? procura de outros jeitos
+                    if erro is not None:
+                        anterior = passos[i - 2] if i > 1 else None
+                        linhas = _alternativas(page, passo, anterior, ns, ui)
+                        if linhas is not None:
+                            erro = None
+                            if linhas:
+                                correcoes[i - 1] = linhas
+                    if erro is not None:
+                        motivo = str(erro).splitlines()[0][:200]
+                        ui.log(f"   PAROU no passo {i}: {motivo}")
+                        _diagnostico(page, passo, i, destino, ui)
+                        resultado["parou"] = (i, passo.splitlines()[0][:150], motivo)
+                        break
+                for valor in list(ns.values()):     # downloads feitos no passo
+                    if hasattr(valor, "save_as") and hasattr(valor, "suggested_filename") \
+                            and id(valor) not in vistos:
+                        vistos.add(id(valor))
+                        destino.mkdir(parents=True, exist_ok=True)
+                        alvo = destino / valor.suggested_filename
+                        valor.save_as(alvo)
+                        resultado["salvos"].append(alvo)
+                        ui.log(f"   download salvo: {alvo}")
+            if not resultado["parou"]:
+                ui.log(f"Fluxo reproduzido até o fim em {time.time() - inicio:.0f} s.")
+            if correcoes:
+                try:
+                    resultado["corrigido"] = _gravar_corrigido(arq, login, passos,
+                                                               correcoes)
+                    ui.log(f"Caminho aprendido. Fluxo corrigido salvo em "
+                           f"{resultado['corrigido'].name}: na próxima vez o robô "
+                           f"vai direto, sem procurar.")
+                except Exception as e:
+                    ui.log(f"Não consegui salvar o fluxo corrigido: {e}")
+            if esperar_fechar:
+                ui.log("Confira o navegador e FECHE-O quando terminar.")
+                _esperar_fechar(page, navegador, ui)
+        finally:
+            _fechar(navegador)
+    return resultado
+
+
+def _nome_corrigido(arq):
+    arq = Path(arq)
+    if arq.stem.endswith("_corrigido"):
+        return arq
+    return arq.with_name(arq.stem + "_corrigido" + arq.suffix)
+
+
+def _gravar_corrigido(arq, login, passos, correcoes):
+    """Grava o fluxo com os passos que precisaram de busca trocados pelo
+    caminho que funcionou (passar o mouse nos submenus, clique sem #ext-gen)."""
+    from datetime import datetime
+    destino = _nome_corrigido(arq)
+    corpo = []
+    for k, passo in enumerate(login + passos):
+        j = k - len(login)
+        blocos = correcoes.get(j, [passo]) if j >= 0 else [passo]
+        for b in blocos:
+            corpo.extend("    " + l for l in b.splitlines())
+    texto = (
+        f"# Fluxo corrigido pelo programa em {datetime.now():%d/%m/%Y %H:%M},\n"
+        f"# a partir de {Path(arq).name}. Reproduza com o botao 'Reproduzir\n"
+        "# fluxo' do programa (passar_mouse, clicar e abrir_item sao do programa).\n"
+        "import re\n"
+        "from playwright.sync_api import Playwright, sync_playwright, expect\n\n\n"
+        "def run(playwright: Playwright) -> None:\n"
+        "    browser = playwright.chromium.launch(headless=False)\n"
+        "    context = browser.new_context()\n"
+        "    page = context.new_page()\n"
+        + "\n".join(corpo) + "\n"
+        "    page.close()\n\n"
+        "    # ---------------------\n"
+        "    context.close()\n"
+        "    browser.close()\n")
+    destino.write_text(texto, encoding="utf-8")
+    return destino
+
+
+def _rodar_passo(page, passo, ns, tempo=None):
+    """Roda um passo. Antes, espera a página terminar de carregar (o sistema
+    é lento e o gravador não registra essas esperas). tempo: limite em ms
+    só para este passo."""
+    try:
+        page.wait_for_load_state("load", timeout=15000)
+    except Exception:
+        pass
+    if tempo:
+        page.set_default_timeout(tempo)
+    try:
+        exec(passo, ns)
+    finally:
+        if tempo:
+            page.set_default_timeout(20000)
+
+
+_RE_CLIQUE = None
+
+
+def _alvo_do_clique(passo):
+    """De 'page....get_by_role("link", name="X").click()' tira ("link", "X").
+    Devolve None se o passo não é um clique simples num elemento com nome."""
+    import ast
+    import re as _re
+    global _RE_CLIQUE
+    if _RE_CLIQUE is None:
+        txt = r'"((?:[^"\\]|\\.)*)"'
+        _RE_CLIQUE = (
+            _re.compile(r'get_by_role\("(\w+)",\s*name=' + txt + r'[^)]*\)'
+                        r'(?:\.first|\.nth\(\d+\))?\.(?:dbl)?click\(\)\s*$'),
+            _re.compile(r'get_by_(?:text|title|label)\(' + txt + r'[^)]*\)'
+                        r'(?:\.first|\.nth\(\d+\))?\.(?:dbl)?click\(\)\s*$'),
+        )
+    if not passo or "\n" in passo:
+        return None
+    m = _RE_CLIQUE[0].search(passo)
+    if m:
+        return m.group(1), ast.literal_eval('"' + m.group(2) + '"')
+    m = _RE_CLIQUE[1].search(passo)
+    if m:
+        return None, ast.literal_eval('"' + m.group(1) + '"')
+    return None
+
+
+def _clicar_em_qualquer_quadro(page, papel, nome, espera=4000):
+    """Procura o elemento visível pelo papel+nome e depois pelo texto, na
+    página e em todos os quadros (iframes). Clica no primeiro que achar."""
+    candidatos = []
+    for quadro in page.frames:
+        if papel:
+            candidatos.append(quadro.get_by_role(papel, name=nome))
+        candidatos.append(quadro.get_by_text(nome, exact=True))
+        candidatos.append(quadro.get_by_text(nome))
+    for loc in candidatos:
+        try:
+            if loc.count() == 0:
+                continue
+            alvo = loc.first
+            alvo.wait_for(state="visible", timeout=espera)
+            alvo.scroll_into_view_if_needed(timeout=espera)
+            alvo.click(timeout=espera)
+            return True
+        except Exception:
+            continue
+    return False
+
+
+# ---- funções que um fluxo corrigido usa (entram no exec dos passos)
+def clicar(page, papel, nome, espera=20000):
+    """Clica no item (papel+nome ou texto) em qualquer quadro, esperando ele
+    aparecer até 'espera' ms."""
+    import time
+    limite = time.time() + espera / 1000
+    while True:
+        if _clicar_em_qualquer_quadro(page, papel, nome, espera=1500):
+            return
+        if time.time() > limite:
+            raise RuntimeError(f'Não achei "{nome}" na tela.')
+        page.wait_for_timeout(300)
+
+
+def passar_mouse(page, texto, espera=10000):
+    """Passa o mouse no item de menu com esse texto (abre o submenu dele)."""
+    import time
+    limite = time.time() + espera / 1000
+    while True:
+        for t, item in _itens_de_menu(page):
+            if t == texto:
+                try:
+                    item.hover(timeout=2000)
+                    page.wait_for_timeout(350)
+                    return
+                except Exception:
+                    pass
+        for quadro in page.frames:
+            loc = quadro.get_by_text(texto, exact=True)
+            try:
+                for k in range(min(loc.count(), 5)):
+                    if loc.nth(k).is_visible():
+                        loc.nth(k).hover(timeout=2000)
+                        page.wait_for_timeout(350)
+                        return
+            except Exception:
+                pass
+        if time.time() > limite:
+            raise RuntimeError(f'Não achei o menu "{texto}" para passar o mouse.')
+        page.wait_for_timeout(300)
+
+
+def abrir_item(page, papel, nome, indice, acao):
+    """Repete a ação que abriu o menu certo: entre os itens visíveis com esse
+    nome, o de número 'indice'."""
+    itens = _visiveis(page, papel, nome)
+    if indice >= len(itens):
+        raise RuntimeError(f'Não achei o "{nome}" número {indice + 1}.')
+    _fazer_acao(itens[indice], acao)
+    page.wait_for_timeout(800)
+
+
+_AJUDANTES = {"clicar": clicar, "passar_mouse": passar_mouse,
+              "abrir_item": abrir_item}
+
+
+def _fazer_acao(item, acao):
+    if acao == "expandir":                  # o [+] da árvore do ExtJS
+        item.locator(
+            "xpath=ancestor-or-self::tr[1]//*[contains(@class,"
+            "'expander') or contains(@class,'ec-icon') or "
+            "contains(@class,'elbow-plus')]").first.click(timeout=2000)
+    elif acao == "dblclick":
+        item.dblclick(timeout=2000)
+    else:
+        item.click(timeout=2000)
+
+
+def _alternativas(page, passo, anterior, ns, ui):
+    """Quando um clique falha, procura o item de outros jeitos. Devolve as
+    linhas de código do caminho que funcionou ([] = funcionou sem precisar
+    corrigir o fluxo) ou None se não achou."""
+    import re as _re
+    alvo = _alvo_do_clique(passo)
+    if not alvo:
+        return None
+    papel, nome = alvo
+    final = f"clicar(page, {papel!r}, {nome!r})"
+    ui.log(f'   procurando "{nome}" de outro jeito...')
+    # apelidos automáticos do ExtJS (#ext-gen99) mudam a cada vez: sem eles
+    sem_id = _re.sub(r'\.locator\("#ext-[\w-]+"\)', "", passo)
+    if sem_id != passo:
+        try:
+            _rodar_passo(page, sem_id, ns, 4000)
+            ui.log("   achei e cliquei.")
+            return [sem_id]
+        except Exception:
+            pass
+    if _clicar_em_qualquer_quadro(page, papel, nome, espera=1500):
+        ui.log("   achei e cliquei.")
+        return [final]
+    # submenu que só abre passando o mouse (o gravador não grava isso)
+    caminho = _procurar_em_submenus(page, papel, nome, ui)
+    if caminho is not None:
+        return [f"passar_mouse(page, {t!r})" for t in caminho] + [final]
+    ant = _alvo_do_clique(anterior) if anterior else None
+    # reabre o menu do passo anterior (só itens de menu/árvore; nunca repete
+    # um botão como Consultar), testando cada um visível com o mesmo nome
+    if ant and ant[0] != "button":
+        ui.log(f'   abrindo de novo "{ant[1]}" (testando cada um visível)...')
+        for n, cand in enumerate(_visiveis(page, ant[0], ant[1])):
+            for acao in ("click", "click", "expandir", "dblclick"):
+                try:
+                    _fazer_acao(cand, acao)
+                    page.wait_for_timeout(1000)
+                except Exception:
+                    continue
+                abrir = f"abrir_item(page, {ant[0]!r}, {ant[1]!r}, {n}, {acao!r})"
+                if _clicar_em_qualquer_quadro(page, papel, nome, espera=1000):
+                    ui.log("   achei e cliquei.")
+                    return [abrir, final]
+                caminho = _procurar_em_submenus(page, papel, nome, ui)
+                if caminho is not None:
+                    return ([abrir] + [f"passar_mouse(page, {t!r})" for t in caminho]
+                            + [final])
+    # por último: a página pode só estar lenta
+    ui.log("   esperando mais um pouco (o sistema pode estar lento)...")
+    try:
+        clicar(page, papel, nome, espera=20000)
+        ui.log("   apareceu e cliquei.")
+        return []
+    except Exception:
+        return None
+
+
+# itens de menu que abrem outro menu (seta ▸) no ExtJS e em menus comuns
+_SUBMENU = ("[aria-haspopup='true'], [aria-haspopup='menu'], "
+            ".x-menu-item-arrow, a.x-menu-item, .x-menu-item, [role='menuitem']")
+
+
+def _itens_de_menu(page):
+    """[(texto, locator)] dos itens de menu visíveis agora, em todos os
+    quadros (uma consulta por quadro, para ser rápido). Os de dentro de um
+    menu aberto vêm antes dos da barra de menus."""
+    achados = []
+    for quadro in page.frames:
+        try:
+            loc = quadro.locator(_SUBMENU)
+            info = loc.evaluate_all(
+                "els => els.map(e => { const r = e.getBoundingClientRect();"
+                " const st = getComputedStyle(e);"
+                " return [r.width > 0 && r.height > 0 && st.visibility !== 'hidden',"
+                " (e.innerText || '').replace(/\\s+/g, ' ').trim(),"
+                " !!e.closest('.x-menu, [role=menu]')]; })")
+        except Exception:
+            continue
+        for k, (visivel, texto, em_menu) in enumerate(info[:80]):
+            if visivel and texto and len(texto) < 80:
+                achados.append((not em_menu, texto, loc.nth(k)))
+    achados.sort(key=lambda x: x[0])           # menus abertos primeiro
+    vistos, saida = set(), []
+    for _, texto, item in achados:
+        if texto not in vistos:
+            vistos.add(texto)
+            saida.append((texto, item))
+    return saida
+
+
+def _procurar_em_submenus(page, papel, nome, ui, candidatos=None, caminho=(),
+                          nivel=0):
+    """Passa o mouse nos itens de menu visíveis (os com seta ▸ abrem outro
+    menu) e vê se o item procurado aparece. Quando um submenu abre, desce
+    só pelos itens que acabaram de aparecer, até 4 níveis. Devolve o
+    caminho (textos em que passou o mouse) ou None."""
+    if nivel > 4:
+        return None
+    if candidatos is None:
+        candidatos = _itens_de_menu(page)
+    for texto, item in candidatos:
+        if texto == nome or texto in caminho:
+            continue
+        antes = {t for t, _ in _itens_de_menu(page)}
+        try:
+            item.hover(timeout=2000)
+            page.wait_for_timeout(500)
+        except Exception:
+            continue
+        if _clicar_em_qualquer_quadro(page, papel, nome, espera=800):
+            trilha = caminho + (texto,)
+            ui.log(f'   achei passando o mouse em "{" > ".join(trilha)}" e cliquei.')
+            return trilha
+        novos = [(t, i) for t, i in _itens_de_menu(page) if t not in antes]
+        if novos:
+            achado = _procurar_em_submenus(page, papel, nome, ui, novos,
+                                           caminho + (texto,), nivel + 1)
+            if achado is not None:
+                return achado
+    return None
+
+
+def _visiveis(page, papel, nome, limite=8):
+    """Todos os elementos visíveis com esse papel+nome (ou texto), em todos
+    os quadros, ignorando apelidos automáticos como #ext-gen99."""
+    achados = []
+    for quadro in page.frames:
+        grupos = [quadro.get_by_text(nome, exact=True)]
+        if papel:
+            grupos.insert(0, quadro.get_by_role(papel, name=nome, exact=True))
+        for loc in grupos:
+            try:
+                for k in range(min(loc.count(), limite)):
+                    item = loc.nth(k)
+                    if item.is_visible():
+                        achados.append(item)
+            except Exception:
+                pass
+    return achados
+
+
+def _diagnostico(page, passo, i, destino, ui):
+    """Salva um print da tela e conta onde o item procurado aparece, para
+    entender por que o passo parou."""
+    try:
+        destino.mkdir(parents=True, exist_ok=True)
+        foto = destino / f"parou_no_passo_{i}.png"
+        page.screenshot(path=str(foto), full_page=True)
+        ui.log(f"   print da tela salvo em: {foto}")
+    except Exception:
+        pass
+    alvo = _alvo_do_clique(passo)
+    if not alvo:
+        return
+    nome = alvo[1]
+    try:
+        quadros = page.frames
+        achados = []
+        for n, quadro in enumerate(quadros):
+            loc = quadro.get_by_text(nome)
+            total = loc.count()
+            if total:
+                visiveis = sum(1 for k in range(min(total, 10))
+                               if loc.nth(k).is_visible())
+                achados.append(f"quadro {n}: {total} (visíveis: {visiveis})")
+        ui.log(f'   "{nome}" na tela: ' + ("; ".join(achados) if achados
+                                           else "não encontrado") +
+               f" ({len(quadros)} quadro(s) na página)")
+        # textos parecidos visíveis (ajuda a ver se o nome mudou na tela)
+        pedaco = nome.split()[0][:6]
+        parecidos = []
+        for quadro in quadros:
+            loc = quadro.get_by_text(pedaco)
+            for k in range(min(loc.count(), 15)):
+                try:
+                    if loc.nth(k).is_visible():
+                        t = " ".join(loc.nth(k).inner_text(timeout=1000).split())
+                        if t and len(t) < 80 and t not in parecidos:
+                            parecidos.append(t)
+                except Exception:
+                    pass
+        if parecidos:
+            ui.log(f'   textos com "{pedaco}" visíveis: ' + " | ".join(parecidos[:10]))
+    except Exception:
+        pass
+
+
+def _na_tela_de_login(page):
+    """True se a página (ou um quadro dela) mostra o formulário de login."""
+    try:
+        if "hwlogin" in page.url.lower():
+            return True
+        for quadro in page.frames:
+            try:
+                if quadro.locator("#vUSULOGIN").count() > 0:
+                    return True
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return False
+
+
+def _fazer_login(page, ui, login, minutos=10):
+    """Leva o navegador para dentro do sistema: espera a tela de login
+    aparecer, preenche usuário e senha se estiverem no fluxo gravado e, se
+    não der, espera a pessoa entrar à mão."""
+    import time
+    # o endereço inicial redireciona para a tela de login: espera ela aparecer
+    limite = time.time() + 20
+    while not _na_tela_de_login(page) and time.time() < limite:
+        if ui.cancelado:
+            raise Cancelado()
+        try:
+            page.wait_for_timeout(300)
+        except Exception:
+            raise RuntimeError("O navegador foi fechado antes do login.")
+    if not _na_tela_de_login(page):
+        ui.log("Não apareceu tela de login; seguindo com os passos.")
+        return
+
+    senha = _senha_do_login(login)
+    if senha is not None and senha.strip().lower() not in _SENHA_FALSA:
+        ui.log("Entrando no sistema com o usuário e a senha do fluxo gravado...")
+        try:
+            for c in login:
+                # só o que importa: abrir a página, digitar e apertar ENTRAR.
+                # Cliques soltos (em campos ou células da tela) são pulados.
+                essencial = (c.startswith("page.goto(") or ".fill(" in c
+                             or ".press(" in c or "ENTRAR" in c)
+                if not essencial:
+                    continue
+                c = c.replace(".dblclick(", ".click(")   # duplo clique = 2 envios
+                if c.startswith("page.goto(") and _na_tela_de_login(page):
+                    continue                              # já está nela
+                exec(c, {"page": page})
+            limite = time.time() + 30
+            while _na_tela_de_login(page) and time.time() < limite:
+                page.wait_for_timeout(500)
+        except Exception as e:
+            ui.log(f"   Não consegui entrar sozinho ({str(e).splitlines()[0][:120]}).")
+        if not _na_tela_de_login(page):
+            _depois_do_login(page, ui)
+            return
+        ui.log("   O login automático não entrou (senha mudou?).")
+
+    ui.log("Faça o LOGIN no navegador que abriu. O robô começa sozinho assim "
+           "que você entrar.")
+    limite = time.time() + minutos * 60
+    while _na_tela_de_login(page):
+        if ui.cancelado:
+            raise Cancelado()
+        if time.time() > limite:
+            raise RuntimeError("Tempo esgotado esperando o login (10 minutos).")
+        try:
+            page.wait_for_timeout(500)
+        except Exception:
+            raise RuntimeError("O navegador foi fechado antes do login.")
+    _depois_do_login(page, ui)
+
+
+def _depois_do_login(page, ui):
+    try:
+        page.wait_for_load_state("load", timeout=20000)
+    except Exception:
+        pass
+    ui.log("Login feito. Repetindo os passos...")
+
+
+def _esperar_fechar(page, navegador, ui):
+    """Deixa o navegador aberto até a pessoa fechá-lo (ou cancelar)."""
+    while navegador.is_connected() and not page.is_closed() and not ui.cancelado:
+        try:
+            page.wait_for_timeout(500)
+        except Exception:
+            break
 
 
 # ==========================================================================
@@ -943,3 +1594,68 @@ def calcular_beneficios(cfg, ano, mes, dias_uteis, ui):
     for a in arquivos:
         ui.log(f"Gerado: {a}")
     return res, arquivos
+
+
+# ==========================================================================
+# VERIFICAÇÃO  ("AutomacaoAbaco.exe --verificar" ou "python abaco_automacao.py
+# --verificar"): confere o pacote sem abrir a tela. Grava verificacao.txt.
+# ==========================================================================
+def verificar_instalacao():
+    """Devolve (tudo_ok, linhas) e grava PASTA/verificacao.txt."""
+    linhas, ok = [], True
+
+    def item(nome, passou, detalhe=""):
+        nonlocal ok
+        ok = ok and passou
+        linhas.append(f"[{'OK ' if passou else 'ERRO'}] {nome}"
+                      + (f": {detalhe}" if detalhe else ""))
+
+    linhas.append(f"Automação Ábaco + Excel - verificação em "
+                  f"{datetime.now():%d/%m/%Y %H:%M}")
+    item("Modo", True, "programa empacotado (.exe)" if EMPACOTADO
+         else f"Python {sys.version.split()[0]} ({sys.executable})")
+    item("Pasta de dados", os.access(PASTA, os.W_OK), str(PASTA))
+    for modulo in ("PySide6.QtWidgets", "pandas", "openpyxl", "xlrd",
+                   "lxml.etree", "playwright.sync_api"):
+        try:
+            __import__(modulo)
+            item(f"Biblioteca {modulo}", True)
+        except Exception as e:
+            item(f"Biblioteca {modulo}", False, str(e).splitlines()[0][:150])
+    try:
+        comando, _ = _comando_playwright("--version")
+        r = subprocess.run(comando, capture_output=True, text=True, timeout=60,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        item("Motor do navegador (Playwright)", r.returncode == 0,
+             (r.stdout or r.stderr).strip()[:80])
+    except Exception as e:
+        item("Motor do navegador (Playwright)", False, str(e)[:150])
+    try:
+        nav_ok, texto = situacao_navegador()
+        item("Navegador para o robô", nav_ok, texto)
+    except Exception as e:
+        item("Navegador para o robô", False, str(e)[:150])
+    try:
+        import tempfile
+        import pandas as pd
+        with tempfile.TemporaryDirectory() as tmp:
+            arq = Path(tmp) / "teste.xlsx"
+            pd.DataFrame({"Matrícula": ["1"], "Valor": [400.0]}).to_excel(arq, index=False)
+            lido = pd.read_excel(arq, dtype=str)
+        item("Leitura e gravação de planilhas", lido.iloc[0, 0] == "1")
+    except Exception as e:
+        item("Leitura e gravação de planilhas", False, str(e)[:150])
+    try:
+        import regras_beneficios as rb
+        du = rb.Calendario.do_config(2026, 2026, rb.REGRAS_PADRAO).dias_uteis_mes(2026, 11)
+        item("Regras de VR/VA", du == 19, f"novembro/2026 = {du} dias úteis")
+    except Exception as e:
+        item("Regras de VR/VA", False, str(e)[:150])
+    linhas.append("RESULTADO: " + ("tudo certo" if ok else "há itens com ERRO"))
+    try:
+        (PASTA / "verificacao.txt").write_text("\n".join(linhas) + "\n",
+                                              encoding="utf-8")
+    except OSError:
+        pass
+    return ok, linhas
+

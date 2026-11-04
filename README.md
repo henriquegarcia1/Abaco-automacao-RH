@@ -50,6 +50,36 @@ INICIAR.bat -SoInstalar     instala e não abre
 INICIAR.bat -Reinstalar     apaga o ambiente e instala tudo de novo
 ```
 
+### Programa sem Python (AutomacaoAbaco.exe)
+
+Para usar em computadores **sem Python instalado**, gere o programa
+empacotado. Faça isso **uma vez** num computador que já abriu pelo
+`INICIAR.bat`:
+
+1. Dois cliques no **`empacotar.bat`**. Ele confere o ambiente, instala o
+   PyInstaller, gera o programa, testa e compacta. Leva de 2 a 5 minutos.
+2. O resultado fica em **`dist\AutomacaoAbaco\`**, com o
+   **`AutomacaoAbaco.exe`**, e em **`dist\AutomacaoAbaco.zip`**.
+3. Copie a pasta `AutomacaoAbaco` inteira (ou extraia o .zip) para outro
+   computador, na **Área de Trabalho ou em Documentos**, e abra o
+   **`AutomacaoAbaco.exe`**. Não precisa instalar nada.
+
+Nos outros computadores:
+
+- `config.json`, `entrada\` e `saida\` ficam **dentro da pasta do
+  programa**. O `config.json` copiado leva o endereço da Ábaco, os valores e
+  as regras.
+- O robô usa o **Microsoft Edge** do Windows. O Chromium é opcional
+  (tela Instalação > "Baixar o navegador controlado").
+- **`VERIFICAR.bat`**, que vai junto, confere se o programa funciona naquele
+  computador sem abrir a tela, e grava o resultado em `verificacao.txt`.
+- Não coloque a pasta em `C:\Arquivos de Programas`: lá o programa não
+  consegue gravar as planilhas.
+- Sempre que o programa for atualizado, rode o `empacotar.bat` de novo e
+  redistribua a pasta.
+- Se o antivírus barrar o `.exe`, peça ao TI para liberar a pasta (é comum
+  com programas gerados pelo PyInstaller).
+
 ---
 
 ## As telas
@@ -168,7 +198,27 @@ resolvidas.
   Ao fechar o navegador, sai o `relatorio_observacao.md`.
 - **Gravar fluxo**: a pessoa executa uma tarefa **uma vez** e o gravador
   do Playwright escreve o passo a passo em `fluxo_gravado.py`. É assim que
-  se descobrem os seletores do robô de consulta.
+  se descobrem os seletores do robô de consulta. Renomeie o arquivo depois
+  de cada gravação (ex.: `fluxo_frequencias.py`), senão a próxima o substitui.
+- **Reproduzir fluxo...**: escolhe um fluxo gravado e o repete num
+  navegador visível, para testar a gravação. Roda **rápido**; marque
+  **"Reproduzir devagar (para acompanhar)"** para ver passo a passo (pausa de
+  0,6 s entre as ações). Se a senha ficou gravada no fluxo, o robô **faz o
+  login sozinho**; se não (ou se a senha mudou), a pessoa entra à mão e o
+  robô **começa sozinho** assim que ela entra. Cliques soltos dados na tela
+  de login são ignorados.
+  Se um item não aparece (submenu que só abre passando o mouse, como
+  "Consultas Adicionais por Servidor ▸", ou menu que mudou de lugar), o robô
+  procura sozinho e **aprende o caminho**: grava `<fluxo>_corrigido.py` com
+  os passos certos (`passar_mouse`, `clicar`). Nas próximas vezes o programa
+  usa o corrigido sozinho e vai direto. Se você gravar o fluxo de novo, o
+  corrigido antigo deixa de ser usado. Se mesmo assim parar, salva um print
+  em `reproducao\`. No fim, o navegador fica aberto até a pessoa fechá-lo.
+  Downloads vão para a pasta `reproducao\`. Age no **sistema real**: use só
+  com fluxos de consulta e relatório (o programa avisa se o fluxo tiver
+  botões como Importar, Confirmar ou Salvar).
+- **Ver o código do fluxo**: abre o arquivo no Bloco de Notas, só para ler
+  (não reproduz; para isso use Reproduzir fluxo).
 - **Extrair tabela para Excel**: lê a tabela que está na tela da Ábaco,
   em várias páginas seguidas, e grava num `.xlsx`.
 
@@ -241,6 +291,9 @@ citados na reunião: 19 dias úteis em novembro/2026 e 22 em dezembro):
 | Arquivo | Para que serve |
 |---|---|
 | `INICIAR.bat` | **abre o programa** (instala o que faltar, inclusive o Python) |
+| `empacotar.bat` | gera o programa que roda **sem Python** (`dist\AutomacaoAbaco\AutomacaoAbaco.exe`) |
+| `AutomacaoAbaco.spec` | receita do PyInstaller usada pelo `empacotar.bat` |
+| `VERIFICAR.bat` | vai junto com o .exe: confere o programa sem abrir a tela |
 | `instalar.ps1` | o instalador chamado pelo `INICIAR.bat` |
 | `abaco_automacao.py` | a tela (Qt6) |
 | `nucleo_abaco.py` | o que o programa faz: navegador, observação, coleta, robô |
@@ -250,6 +303,7 @@ citados na reunião: 19 dias úteis em novembro/2026 e 22 em dezembro):
 | `requirements.txt` | bibliotecas instaladas no ambiente do programa |
 | `config.json` | criado na 1ª vez; configurações e regras |
 | `entrada/` | relatórios do mês, a planilha do mês anterior e os ajustes |
+| `dist/` | criada pelo `empacotar.bat`: o programa empacotado e o .zip |
 | `saida/AAAA-MM/` | a planilha da Divisão (base do mês seguinte), conferência e importação |
 | `modelos/` | planilhas de entrada vazias |
 | `relatorio_observacao.md` / `.json` | saída da observação |

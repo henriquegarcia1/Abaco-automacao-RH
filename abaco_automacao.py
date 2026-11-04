@@ -833,9 +833,18 @@ class PaginaDiagnostico(Pagina):
             "Gravar fluxo",
             "A pessoa executa UMA tarefa do início ao fim e o gravador do Playwright "
             "escreve os passos em código. Use também para ensinar o robô de consulta: "
-            "grave a pesquisa de uma matrícula na tela de consulta do servidor.")
+            "grave a pesquisa de uma matrícula na tela de consulta do servidor. "
+            "Para testar uma gravação, use Reproduzir fluxo: o robô entra no "
+            "sistema e repete os passos (no sistema real: só consultas e "
+            "relatórios). Se precisar procurar algum item, ele grava um "
+            "fluxo _corrigido e, nas próximas vezes, vai direto.")
+        self.devagar = QCheckBox("Reproduzir devagar (para acompanhar)")
+        self.devagar.setChecked(bool(self.j.cfg.get("reproduzir_devagar", False)))
+        self.devagar.toggled.connect(self.trocar_velocidade)
         lay.addWidget(linha(botao("Gravar fluxo", self.gravar, True),
-                            botao("Abrir fluxo gravado", self.abrir_fluxo)))
+                            botao("Reproduzir fluxo...", self.reproduzir, True),
+                            botao("Ver o código do fluxo", self.abrir_fluxo)))
+        lay.addWidget(linha(self.devagar))
         self.corpo.addWidget(q)
 
         q, lay = cartao(
@@ -875,12 +884,57 @@ class PaginaDiagnostico(Pagina):
         if md.exists():
             nucleo.abrir_no_sistema(md)
 
+    def trocar_velocidade(self, marcado):
+        self.j.cfg["reproduzir_devagar"] = bool(marcado)
+        try:
+            nucleo.salvar_config(self.j.cfg)
+        except Exception:
+            pass
+
+    def reproduzir(self):
+        cfg = self.j.cfg
+        padrao = nucleo.PASTA / cfg["arquivo_fluxo"]
+        caminho, _ = QFileDialog.getOpenFileName(
+            self, "Qual fluxo reproduzir?",
+            str(padrao if padrao.exists() else nucleo.PASTA),
+            "Fluxos gravados (*.py)")
+        if not caminho:
+            return
+
+        def fim(r):
+            if not r:
+                return
+            if r["salvos"]:
+                self.j.log(f"{len(r['salvos'])} arquivo(s) baixado(s) em "
+                           f"{r['salvos'][0].parent}")
+            extra = ""
+            if r.get("corrigido"):
+                extra = (f"\n\nO robô aprendeu o caminho e salvou "
+                         f"{r['corrigido'].name}. Nas próximas vezes ele usa esse "
+                         f"arquivo sozinho e vai direto.")
+            if r["parou"]:
+                i, passo, motivo = r["parou"]
+                QMessageBox.warning(self, "O fluxo parou",
+                                    f"Parou no passo {i} de {r['passos']}:\n{passo}\n\n"
+                                    f"Motivo: {motivo}\n\nSe a tela do sistema mudou, "
+                                    f"grave o fluxo de novo." + extra)
+            else:
+                QMessageBox.information(self, "Fluxo reproduzido",
+                                        f"Os {r['passos']} passos foram repetidos "
+                                        f"até o fim." + extra)
+        self.j.executar("Reproduzir fluxo",
+                        lambda ui: nucleo.reproduzir_fluxo(cfg, ui, caminho), fim)
+
     def abrir_fluxo(self):
         f = nucleo.PASTA / self.j.cfg["arquivo_fluxo"]
-        if f.exists():
-            nucleo.abrir_no_sistema(f)
-        else:
+        if not f.exists():
             QMessageBox.information(self, "Sem fluxo", "Nenhum fluxo gravado ainda.")
+        elif sys.platform == "win32":
+            # abrir no Bloco de Notas: com dois cliques o Windows EXECUTARIA o .py
+            import subprocess
+            subprocess.Popen(["notepad.exe", str(f)])
+        else:
+            nucleo.abrir_no_sistema(f)
 
 
 # --------------------------------------------------------------------------
@@ -1278,8 +1332,14 @@ class PaginaInstalacao(Pagina):
     descricao = ("O Python, esta tela e as bibliotecas são instalados pelo "
                  "INICIAR.bat (dois cliques). Aqui dá para conferir e reinstalar "
                  "as bibliotecas e o navegador.")
+    descricao_exe = ("Programa empacotado (AutomacaoAbaco.exe): o Python e as "
+                     "bibliotecas já vêm dentro dele, sem instalar nada. Aqui dá "
+                     "para conferir e baixar o navegador controlado (Chromium); "
+                     "sem ele, o robô usa o Edge do Windows.")
 
     def __init__(self, janela):
+        if nucleo.EMPACOTADO:   # antes de montar a tela (a classe Pagina lê isto)
+            PaginaInstalacao.descricao = PaginaInstalacao.descricao_exe
         super().__init__(janela)
         q, lay = cartao("Situação")
         self.lista = QTreeWidget()
@@ -1288,7 +1348,9 @@ class PaginaInstalacao(Pagina):
         self.lista.setMinimumHeight(220)
         self.lista.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         lay.addWidget(self.lista)
-        lay.addWidget(linha(botao("Instalar / atualizar bibliotecas e navegador",
+        lay.addWidget(linha(botao("Baixar o navegador controlado (Chromium)"
+                                  if nucleo.EMPACOTADO else
+                                  "Instalar / atualizar bibliotecas e navegador",
                                   self.instalar, True),
                             botao("Verificar de novo", self.ao_mostrar)))
         self.corpo.addWidget(q)
@@ -1296,7 +1358,9 @@ class PaginaInstalacao(Pagina):
     def ao_mostrar(self):
         self.lista.clear()
         self.lista.addTopLevelItem(QTreeWidgetItem(
-            ["Python", f"{sys.version.split()[0]} — {sys.executable}"]))
+            ["Python", f"{sys.version.split()[0]} — "
+                       + ("embutido no programa" if nucleo.EMPACOTADO
+                          else sys.executable)]))
         for pacote, ok in nucleo.bibliotecas_instaladas().items():
             self.lista.addTopLevelItem(QTreeWidgetItem(
                 [pacote, "✔ instalado" if ok else "⚠ falta"]))
@@ -1444,8 +1508,10 @@ class Janela(QMainWindow):
     def _pergunta(self, msg, opcoes):
         if self.ponte:
             self.pergunta.mostrar(msg, opcoes, self.ponte.responder)
-            self.raise_()
-            self.activateWindow()
+            # não puxa a janela para a frente (ela cobriria o navegador em que a
+            # pessoa está trabalhando): só pisca na barra de tarefas
+            if self.isMinimized():
+                self.showNormal()
             QApplication.alert(self)
 
     def _arquivo(self, msg):
@@ -1500,6 +1566,13 @@ class Janela(QMainWindow):
 
 
 def main():
+    if "--verificar" in sys.argv:          # confere o pacote sem abrir a tela
+        ok, linhas = nucleo.verificar_instalacao()
+        try:
+            print("\n".join(linhas))
+        except Exception:
+            pass                            # .exe sem console: vale o arquivo
+        sys.exit(0 if ok else 1)
     app = QApplication(sys.argv)
     app.setApplicationName("Automação Ábaco + Excel")
     app.setStyleSheet(ESTILO)
