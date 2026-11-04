@@ -1,0 +1,20 @@
+# Dependências do programa de Automação Ábaco + Excel.
+#
+# O jeito fácil é dar dois cliques no INICIAR.bat: ele instala o Python
+# (se faltar), estas bibliotecas e o navegador, e abre o programa.
+# Precisa de Python 3.10 a 3.14 de 64 bits (o playwright atual não roda no 3.9).
+# Para instalar na mão:
+#
+#     pip install -r requirements.txt
+#     python -m playwright install chromium
+#
+# tela (Qt6) — só os módulos essenciais, sem o navegador embutido (WebEngine)
+PySide6-Essentials>=6.8,<7
+# navegador controlado
+playwright==1.63.0
+# planilhas
+pandas
+openpyxl
+# relatórios exportados como .xls antigo, ou como página HTML com extensão .xls
+xlrd
+lxml

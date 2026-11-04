@@ -1,0 +1,104 @@
+{
+  "url_abaco": "https://www.abaco.com.br",
+  "arquivo_fluxo": "fluxo_gravado.py",
+  "planilha": "dados.xlsx",
+  "relatorio": "relatorio_observacao",
+  "mostrar_navegador": true,
+  "pasta_entrada": "entrada",
+  "pasta_saida": "saida",
+  "tela_consulta": {
+    "campo_matricula": "",
+    "botao_pesquisar": "",
+    "espera_ms": 1500,
+    "campos": {
+      "nome": "",
+      "data_admissao": "",
+      "cargo": "",
+      "jornada": "",
+      "secretaria": ""
+    }
+  },
+  "beneficios": {
+    "feriados_municipais": {},
+    "pontos_facultativos": {},
+    "secretaria_educacao_contem": "educa",
+    "situacoes_excluir": [
+      "exonera",
+      "demitid",
+      "falecid",
+      "aposentad",
+      "rescis",
+      "desligad"
+    ],
+    "situacoes_verificar": [
+      "afastad",
+      "licenc",
+      "inss",
+      "suspens"
+    ],
+    "exclusoes": [
+      {
+        "campo": "vinculo",
+        "contem": "agente politico",
+        "motivo": "Agente político não recebe (E1)"
+      },
+      {
+        "campo": "vinculo",
+        "contem": "cedid",
+        "motivo": "Servidor cedido não recebe (E2)"
+      },
+      {
+        "campo": "vinculo",
+        "contem": "pss",
+        "ano_admissao": 2022,
+        "motivo": "PSS de 2022 não faz jus (E3)"
+      }
+    ],
+    "vr": {
+      "valor_dia_por_jornada": {
+        "4h30": null,
+        "6h": null,
+        "12h": null,
+        "40h": null
+      },
+      "layout_importacao": [
+        [
+          "Matrícula",
+          "matricula"
+        ],
+        [
+          "Nome",
+          "nome"
+        ],
+        [
+          "Quantidade",
+          "quantidade"
+        ]
+      ]
+    },
+    "va": {
+      "ativo": true,
+      "valor_mensal": null,
+      "com_falta": "revisar",
+      "layout_importacao": [
+        [
+          "Matrícula",
+          "matricula"
+        ],
+        [
+          "Nome",
+          "nome"
+        ],
+        [
+          "Valor",
+          "valor"
+        ]
+      ]
+    },
+    "prazos": {
+      "documentacao_ate_dia": 5,
+      "folha_fecha_dia": 20
+    },
+    "colunas_extras": {}
+  }
+}

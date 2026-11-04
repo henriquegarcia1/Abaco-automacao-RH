@@ -1,0 +1,398 @@
+[00:00:00] Falante 1: Bom, vamos lá. Posso deixar aqui também?
+
+[00:00:03] Falante 2: Pode.
+
+[00:00:05] Falante 1: Primeiro me conta, meus amigos, o que seria interessante para que você consiga começar esse processo que são mais repetitivos e que envolvem menos a Ábaco. Se você passa alguma, você vai na Ábaco que você busca você mesmo de jeito. Eu acho que isso é o mais interessante, porque se a gente não tiver contato com a Ábaco nesse momento, eu já consigo te ajudar de alguma forma. Entendi. Agora, não. Se todos tiverem contato com a Ábaco, você pode falar com todos mesmo.
+
+[00:00:26] Falante 2: Hoje a gente trabalha aqui muito manual, tanto vale alimentação, refeição e vale transporte. Vou te mostrar, por exemplo, a planilha bem vale refeição. Então eu tenho que alimentar ela todo mês, de acordo com as contratações, de acordo com as exonerações, se o servidor é plantonista, se ele é ADM, então essa alteração é toda feita manualmente. Então, eu alimento aqui para a gente poder fazer a importação dentro da Ábaco. Mas eu preciso acessar a Ábaco porque eu preciso dos dados funcionais daquele servidor. Então, aí eu acesso a Ábaco.
+
+[00:01:08] Falante 1: Você acessa a Ábaco só para buscar os dados?
+
+[00:01:09] Falante 2: Buscar dados.
+
+[00:01:10] Falante 1: Mas a quantidade é você que coloca?
+
+[00:01:14] Falante 2: Não, a quantidade é de acordo com os dias úteis. Eu alimento aqui, ó.
+
+[00:01:18] Falante 1: Aí você pega na folha de ponto e não vê que ele foi trabalhar.
+
+[00:01:21] Falante 2: Não, não pega a folha de ponto porque como a gente paga de forma antecipada, A única movimentação que eu faço, o manual, é só de plantonista Porque tem meses que ele vai ser 15, 14 ou 16 Aí depende do mês dele, né? Eu alimento os dados Aí eu emito o relatório de faltas e férias E aí ele vai me dar o quantitativo da carga que aquele servidor vai ter durante aquele mês Por exemplo, agora para novembro foram 19 dias úteis Então eu já tirei o feriado e o ponto facultativo Então, a gente já jogou lá, ele já me deu o quantitativo. Agora, plantão não. Plantão, a secretaria me encaminha todo mês a planilha de quantitativos de plantões daquele servidor. Geralmente é saúde, os vigias, os guardas e aí as sendes também. Eles entram na planilha que a saúde encaminha. Então, aqui eu faço essa alteração manual, que é a de plantão.
+
+[00:02:19] Falante 1: Então, se desenvolvesse algo que ele conseguisse ler as faltas, o dia que ele entrou, os dias que são feriados no mês, os dias que, né, todos esses condicionantes que você colocou e preencher essa planilha automática, resolveria para o senhor?
+
+[00:02:35] Falante 2: Muito, muito. É o que a gente conversou durante um tempo, sabe? Dentro da própria Ábaco, doutor Marino, a gente tem a parte de benefícios. Só que ela não está parametrizada para a gente poder mexer Segundo eles, é questão de parametrização Mas aí tem que englobar várias informações Para ele poder me dar um quantitativo final Isso tanto para o refeição quanto para o vale-transporte Porque a alimentação, como é valor único O servidor só perde se ele faltar Então, independente, aquele servidor vai ter o valor do vale-alimentação Então, ela já é menos preocupante para mim Aqui dentro
+
+[00:03:18] Falante 1: Então você busca essa informação aí dentro do sistema Do jeito que você está fazendo isso Você fala
+
+[00:03:23] Falante 2: de que?
+
+[00:03:25] Falante 1: Todas essas informações de férias É tudo emitido dentro da Ábaco Como é que você faz isso? Por exemplo, aqui
+
+[00:03:32] Falante 2: Eu tenho que emitir o relatório Por exemplo, eu emito o relatório A maioria das coisas são interligadas Eu preciso pegar a informação da Ábaco para eu jogar na minha planilha para eu poder ter o resultado final. Então, aqui eu emito o relatório de férias, o relatório de faltas. Depois que eu emito...
+
+[00:04:05] Falante 1: Você entra no relatório e você pega o relatório e digita lá um a um?
+
+[00:04:09] Falante 2: Não, não. Eu consigo convencer e aí na minha conversão, eu já jogo aqui, por exemplo.
+
+[00:04:16] Falante 1: Você joga isso por conta mágica?
+
+[00:04:18] Falante 2: Só fazer um teste aqui.
+
+[00:04:25] Falante 2: Aqui, eu entro aqui no relatório de período de férias. Geralmente aqui as férias a gente emite três meses, porque dá no final do mês, no meio do outro mês, mas no início do mês subsequente. Então, por exemplo, aqui eu jogo do mês 10 até o mês 1 de 2027. 10, 11, 12, 10, 11, 12, não, vou jogar aqui em dezembro de 2026.
+
+[00:05:05] Falante 1: Só que o avião mesmo já faz a conta dele.
+
+[00:05:08] Falante 2: É, ele vem na, ele já vem do jeito, acho que aqui ele vai gerar em PDF, mas eu consigo gerar ele em Excel também. Então eu pego, filtro as informações necessárias e já jogo ele aqui.
+
+[00:05:22] Falante 1: Ah, você filtra aqui no relatório.
+
+[00:05:23] Falante 2: É, eu filtro no relatório.
+
+[00:05:25] Falante 1: Entendi. Aí a gente só copia e passa pra lá?
+
+[00:05:28] Falante 2: E passa pra cá.
+
+[00:05:28] Falante 1: Então a única coisa que você tem que fazer é copiar e colar?
+
+[00:05:30] Falante 2: Exatamente.
+
+[00:05:30] Falante 1: Então isso aí não seria algo assim tão complexo?
+
+[00:05:33] Falante 2: Não, não. A mesma coisa eu faço tanto com o de férias quanto com o de faltas. E aí eu já jogo as informações aqui e aqui no resultado final...
+
+[00:05:44] Falante 1: A própria maneira de carga já faz...
+
+[00:05:46] Falante 2: Ela já me dá. Se eu altero aqui pra... igual agora a gente vai fazer dezembro, né?
+
+[00:06:11] Falante 2: eu altero a quantidade. Aqui, vamos supor que em dezembro são 22 dias. Ele já me dá o quantitativo. Mas o que a gente...
+
+[00:06:20] Falante 1: Você faz isso uma vez por mês?
+
+[00:06:23] Falante 2: Todo mês. Eu movimento essa planilha igual. O recebimento de documentação é até o dia 5. Então, dia 5 chegam todas as documentações para mim. Aí, os plantonistas, eu vou alimentando aqui. E aí, a DM eu não preciso se preocupar. Porque aqui o diferenciado, o que entra, entra é a diferença de valores. A gente tem quatro tipos de valores hoje que a gente paga por benefício. A gente paga por jornada. Então, quatro horas e meia, seis horas, doze horas e quarenta horas. Então, aí os valores são distintos. Então, aí, isso aqui pra mim, mas mesmo assim, tanto o normal diferenciado e o diferenciado só, eles vão receber o mesmo quantitativo de dias úteis. Eu vou ter que alimentar só plantão. Alimentei a planilha, ela me deu o saldo No final, eu só importo para a Ábaco Só que eu tenho que alimentar essa planilha todo mês Como que é? Verificar os contratos O pessoal assina o contrato As meninas passam para mim Isso aqui, podia ter um jeito de dentro do sistema Já me dar essas informações na planilha Para eu não precisar digitar um por um Tem mês que é 50, 70 contratos Então eu tenho que olhar a jornada Tem que ir lá, olhar a matrícula, confirmar a matrícula, data de admissão, porque às vezes a data que está aqui não é a data que o servidor começou. Então aí eu preciso olhar para eu poder alimentar essa planilha. Então isso aqui é tudo manual. Então eu tenho que colocar um por um. Fora que a educação é eles quem fazem a planilha. Quando eles mandam para mim, eles já mandam a ponto de importar. Então a planilha da educação é essa mesma coisa. Ela alimenta ela lá, de acordo com as admissões, eu mando para ela, ela faz a inclusão na planilha, manda para mim só o ponto de eu importar para a Ábaco. Então eu tenho que estar aí, mesma coisa. Ela faz a mesma coisa, manda para mim, eu importo dentro da Ábaco para ter o saldo final.
+
+[00:08:22] Falante 1: Quem gera o pagamento então é a Ábaco?
+
+[00:08:24] Falante 2: É a Ábaco que gera.
+
+[00:08:25] Falante 1: Então provavelmente esse saldo que você joga para dentro da Ábaco de novo?
+
+[00:08:29] Falante 2: Aí é uma outra importação, aí é uma outra planilha que a gente faz. Além dessa planilha aqui, a gente faz uma só com a... Deixa eu abrir uma aqui para vocês verem. Exatamente.
+
+[00:08:40] Falante 1: Dentro da sua ideia, eu estou tentando entender, por que é o próprio sistema da Ábaco que a gente faz?
+
+[00:08:46] Falante 2: Por causa de parametrização. Isso já foi questionado. Não, parametrização do sistema. Existe a função, só que não está parametrizada. E aí, toda vez que a gente tem alguma reunião ou algo do tipo, o questionamento é o mesmo. Aí eles falam, não, por causa de valores, tanto do vale do transporte, tarifas. Então, aí, é informação por informação. Eu não vou conseguir ter uma, igual, por exemplo, o vale alimentação, se jogar tudo dentro do sistema, eu sei que agente político não vai receber, cedidos não vão receber e tem os PSS que fizeram em 2022 que também não fazem jus. Então, o sistema tendo essa informação, tem, porque a gente emite o relatório do próprio sistema, mas aí a gente filtrando essas informações, parametrizando, para mim seria uma mão na roda. Eu não ia precisar ficar alimentando a planilha todo mês, sabe? Já me dava ali o quantitativo dentro do próprio sistema, por exemplo, aqui, ó. A gente tem a parte de benefícios, aqui.
+
+[00:10:38] Falante 2: Você
+
+[00:10:55] Falante 2: está procurando a parte de benefícios para eu te mostrar?
+
+[00:10:59] Falante 1: Tá, beleza.
+
+[00:11:00] Falante 2: Deixa eu ver aqui nos lançamentos. Tá vendo? A gente já tem a parte de benefícios dentro do próprio sistema.
+
+[00:11:09] Falante 1: Então, clica aí.
+
+[00:11:10] Falante 2: Aí quando eu entro, benefícios do servidor, aqui a gente consegue cadastrar esses benefícios. Por exemplo, já teve um teste aqui, só que aí eu não sei por que não é inserido no sistema. Então aí todo mês eu tenho que alimentar.
+
+[00:11:27] Falante 1: Você cadastra, mas o sistema não lê os cadastros que você fez. Você pode colocar assim, vale alimentação ali, valor, sei lá, 10 reais, você pode colocar, vale 6 horas, 8 reais, tudo no exato. aí você consegue cadastrar, mas na hora de gerar os relatórios
+
+[00:11:42] Falante 2: não gera, não por causa de parametro da ação
+
+[00:11:46] Falante 1: e eu vou começar isso com o Pedro Pedro é da Ábaco, né?
+
+[00:11:49] Falante 2: Pedro é
+
+[00:11:52] Falante 1: provavelmente ele vai falar isso que você está falando pra mim porque tem uma questão contratual deles ali, eles não querem ceder tá, beleza dois caminhos que eu vou seguir se tiver com muita dificuldade na Ábaco que eu acredito que vai ter, mas é importante eu faço a validação com eles beleza Beleza, vamos tentar de outros caminhos. Aí o que a gente pode fazer? Tudo que você está fazendo aí, que é entrar, você entra aqui, clica aqui, faz isso, faz aquilo, eu consigo ler o que você está fazendo e vou desenvolver um script para que ele faça tudo isso por você. Entendi. Você vai dar só um, você vai ver as telas mexendo, o mouse mexendo, você vai ver uma loucura.
+
+[00:12:30] Falante 2: Ele já vai me dar tudo que eu preciso.
+
+[00:12:32] Falante 1: A única coisa que você vai fazer é validar aquela informação. Se a gente quiser, colocar no descrito e falar que você não passa nenhuma validação sem que ela valida. Mas você pode só conferir, entendeu?
+
+[00:12:41] Falante 2: Entendi.
+
+[00:12:42] Falante 1: Isso que você está me mostrando é o complexo, mas dá para fazer. Eu já estou te falando, por exemplo, o meu sistema de ponto hoje, o justificativo de ponto hoje que eu fiz, eu só dou um comando. Ele entra dentro desses pontos, ele abre o relatório para mim, ele lê o relatório, aquele relatório em PDF, ele lê, abre uma nova tela, como que eu quero justificar aqueles aqueles pontos, eu escolho lá serviço externo, dou um ok. Acabou de ser, ele vai, termina o script e pronto, dentro desses pontos lá.
+
+[00:13:10] Falante 2: Entendi.
+
+[00:13:11] Falante 1: Eu não faço nada, só, eu poderia colocar até automático, todo dia 2, sozinho, quando meu computador ligar, ele vai entrar lá, vai fazer meu login, sem eu fazer nada, só que eu coloquei algumas validações para eu ver se estava certo, deixei um pouquinho semiautomático, mas eu poderia colocar tudo automático
+
+[00:13:29] Falante 2: entendi seria ótimo
+
+[00:13:33] Falante 1: o que a gente quiser fazer, nesse sentido dá pra fazer aí eu não dependo de Ábaco a única coisa que eu vou fazer é entrar dentro do computador ali ele vai lá, vai puxar essa informação ele vai fazer esse trabalho todo eu só
+
+[00:13:46] Falante 2: faço o ponto da gente fazer a importação pra folhas, suponhamos
+
+[00:13:50] Falante 1: é, aí tem que ver se tiver muitas variáveis, aí não vai dar porque, por exemplo, assim Eu tenho a mesma matrícula, o mesmo login, a mesma senha, eu não sei como que seria isso. Em algum momento, provavelmente, você vai ter que digitar alguma coisa se for várias variáveis, entendeu? Entendi. A não ser que essas variáveis podem ser várias também. Só que eu posso colocar elas, todo mês você vai ver as 100 variáveis aqui. Também é possível.
+
+[00:14:15] Falante 2: Entendi.
+
+[00:14:16] Falante 1: É um negócio um pouco mais complexo, mas...
+
+[00:14:18] Falante 2: Mas dá para andar muito envolvido, uma melhorada, né?
+
+[00:14:22] Falante 1: Esse projeto que vocês estão mostrando aí é o mais complexo. Eu acredito que elas vão mostrar que se os outros aqui aparecem, são mais fáceis que esse. Então, se eu conseguir, através desse que é mais difícil, eu acredito que os outros serão mais fáceis.
+
+[00:14:32] Falante 2: Entendi. E a mesma coisa com o Vale Transporte. Mas o Vale Transporte, na época, quando eles me falaram, o problema é das tarifas. Porque nós temos várias tarifas, e aí a inserção dentro da Ábaco, para a gente poder só filtrar os relatórios, e aquilo ali me dá um resultado final. Já me dá o arquivo, ao ponto de estar pronto. Por exemplo, na hora que eu emitisse o relatório, porque são, acho que é XLS,
+
+[00:14:59] Falante 1: XSV,
+
+[00:15:04] Falante 2: cada empresa é uma forma diferente de a gente fazer importação. E aí, aquele relatório, ele emitisse para mim, aquele próprio relatório, eu só emitisse para a empresa, estava ótimo.
+
+[00:15:15] Falante 1: O que é provável que eu faça? Nesse primeiro momento, a gente capta a nossa conversa aqui, eu vou ter essa conversa com mais, provavelmente eu vou deixar alguns meninos com você aqui, alguns dias eles vêm pra cá, pra ver o que você vai fazer ele vai fotografar sua tela, vai filmar seu caso fazer qualquer coisa, pra gente ter essa esse fluxo de rotina a gente pode focar talvez no que te dá mais trabalho sim resolve isso aqui pra mim primeiro, independente do que a gente quer, você fala, resolve isso aqui pra mim resolve, que a gente vai tentar resolver aquele problema e se aquilo der certo, a gente vai fazendo pra outra no meu entendimento, você não entende a Ábaco mas eu entendo essa dificuldade aí de processo, de nada, entendeu.
+
+[00:15:52] Falante 2: Entendi.
+
+[00:15:53] Falante 1: Eu entendo isso aí de de hábitos mais restritivos, mas assim, dá pra fazer. E assim, isso é uma equipe nossa, da prefeitura, então é totalmente diferente do terceiro. Entendi. Aqui nós não estamos por conta, só de resolver isso.
+
+[00:16:07] Falante 2: Entendi.
+
+[00:16:07] Falante 1: A gente está por conta lá, então assim, pode ficar o dia inteiro programando lá. Caso a ligação caia, tem que ir para a prefeitura. Então, provavelmente, da nossa parte, vai evoluir.
+
+[00:16:14] Falante 2: E aí são períodos, porque como geralmente a folha ela fecha todo dia 20, dependendo do mês pode ser que antecipe, eu fico focada no vale, alimentação e refeição durante até um certo período, fechei minha folha, importei, eu já começo a mexer com o vale de transporte.
+
+[00:16:35] Falante 1: o que é importante para a gente você tem isso a sua rotina de trabalho você conseguiria descrever a sua rotina
+
+[00:16:44] Falante 2: a gente já tem o fluxo a gente tem o fluxo e tem o ponto
+
+[00:16:48] Falante 1: a todo dia tal tem você conseguiria depois claro
+
+[00:17:07] Falante 2: subsecretária
+
+[00:17:11] Falante 1: estrutura
+
+[00:17:18] Falante 2: aqui ó, a gente tem de todo mundo, deixa eu abrir o nosso aqui é que a gente já tem a rotina sabe? a gente fez mais ou menos um fluxozinho e depois eles foram lá e mexeram no POP. Foi o pessoal da Rumo, na época. Rumo, era uma empresa terceirizada.
+
+[00:17:44] Falante 1: Pra ajustar isso aí.
+
+[00:17:45] Falante 2: Exatamente.
+
+[00:17:46] Falante 1: E eles conseguiram evoluir?
+
+[00:17:47] Falante 2: Não, parou. Aí, tipo assim, toda vez a gente tem que ficar fazendo a mesma coisa. A gente faz o mesmo fluxo, o mesmo POP. Já tá pronto, é só elaboração. Às vezes a gente vai lá, entra, mexe, tipo assim, mudou alguma coisa na rotina. Vou lá, dou uma atualizada, mas ele ele já está pronto e é o de todas as divisões. Começou, mas depois deram uma cessada.
+
+[00:18:13] Falante 1: Mas o que eles desenvolveram na prática foi o quê?
+
+[00:18:15] Falante 2: Foi muitos... Só o script.
+
+[00:18:18] Falante 1: Só o script.
+
+[00:18:19] Falante 2: Aham.
+
+[00:18:20] Falante 1: E o script rodou?
+
+[00:18:22] Falante 2: Então, não sei se chegou a rodar, não.
+
+[00:18:25] Falante 1: Então, eles começaram a mapear, não chegaram a mudar a sua vida de verdade?
+
+[00:18:28] Falante 2: Finalização, não.
+
+[00:18:29] Falante 1: Porque aí seria... Não. Então, eles já fizeram um pré... a gente pode começar, então, a partir disso.
+
+[00:18:33] Falante 2: Já aproveitar dele.
+
+[00:18:34] Falante 1: que muita coisa provavelmente já está validada já
+
+[00:18:38] Falante 2: e aí aqui a gente tem todas as divisões aqui dentro cada um foi fazendo o seu e aí já chegou nesse ponto aqui depois a gente não mexeu mais o meu é o vale alimentação e refeição e o meu é o vale transporte
+
+[00:18:54] Falante 1: esse é o fluxo
+
+[00:18:56] Falante 2: de alimentação esse é a alimentação aí a gente passa a passo desde quando a gente começa até a finalização Aí é que a gente tem o vale-refeição.
+
+[00:19:08] Falante 1: Dentro desse fluxo, provavelmente todos eles buscam o sistema dentro da Ábaco, né?
+
+[00:19:12] Falante 2: Buscam.
+
+[00:19:12] Falante 1: Todos?
+
+[00:19:13] Falante 2: Todos.
+
+[00:19:13] Falante 1: É sensacional. Todos buscam. Aí você tem direito a mexer só no seu módulo? Ou você mexe, por exemplo, em outro módulo? No sentido assim, sua senha dá acesso a todos os módulos? Tem uma senha matriz aqui que acessa tudo?
+
+[00:19:25] Falante 2: Não. Aí é liberado por usuário.
+
+[00:19:27] Falante 1: Por usuário. No seu caso, você só tem acesso aos módulos que você tem.
+
+[00:19:31] Falante 2: É.
+
+[00:19:31] Falante 1: Você... Sim.
+
+[00:19:34] Falante 2: Você fala dentro do sistema da Ábaco, né?
+
+[00:19:37] Falante 1: É, tipo assim, por exemplo, o senhor consegue acessar o Vale Transporte e Benefício, ele já não consegue, entende?
+
+[00:19:44] Falante 2: É bloqueado, por exemplo, você mexe com o Plano de Saúde. Como o Plano de Saúde é a mesma divisão, então o Plano de Saúde, Vale Transporte, Alimentação e Refeição, nós que somos a mesma divisão, a gente consegue mexer um no outro, né? Mas eu não consigo mexer no ponto, admissão, atos. Aí eu não consigo. Aí é bloqueado por usuário.
+
+[00:20:07] Falante 1: Mas você já dá uma ideia boa.
+
+[00:20:09] Falante 2: Aqui a gente tem as pastas. Tá vendo? Divisão de diretoria PEM. Aí aqui, ó, a gente tem a divisão de férias. Eu não consigo acessar. Aí divisão de férias é só a GESCA. Mas aí eu consigo acessar só a minha divisão de benefícios. que aí é que tem, vale o transporte, refeição, alimentação e o plano de saúde é bloqueado por usuário é,
+
+[00:20:38] Falante 1: última pergunta o que que resolveria mesmo pra te ajudar mesmo, pra gente começar com o mais simples que a gente conseguir seria você preencher automaticamente as planilhas é, tipo assim
+
+[00:20:48] Falante 2: tem alguma forma de puxar do próprio sistema na hora que eu movimentasse na planilha aqui, eu não precisar ficar vindo aqui toda vez, porque é dessa forma, recuso humanos, jogo a matrícula, vejo se o servidor é da minha área, ou se não é, eu tenho que fazer uma planilha à parte para mandar para a educação.
+
+[00:21:15] Falante 1: Então vamos só fazer um teste, se pegasse aquilo que está lá e jogasse para cá o tomate, já te ajudaria? Porque você tem que fazer isso por funcionário, não tem?
+
+[00:21:21] Falante 2: Por servidor.
+
+[00:21:22] Falante 1: Por servidor. Então vamos supor que você tem 50 funcionários ali, você está com a matrícula 17446, vamos Vamos supor que se ele chegasse ali e digitasse 17, 4, 4, 6, então X, Y, Z. Pulava para o próximo. Isso que você faz. Aí 17, 880. João. João tem trabalho em tal lugar, trabalha aí, está pagando.
+
+[00:21:41] Falante 2: Jornada tal.
+
+[00:21:42] Falante 1: Só que você já tem então essa planilha para você alimentar ali, correto? Essa planilha já está pronta, você só alimenta aqui.
+
+[00:21:50] Falante 2: Na verdade eu puxo daqui para alimentar aqui.
+
+[00:21:53] Falante 1: Ah tá, então você tem que ir nele primeiro.
+
+[00:21:55] Falante 2: Exatamente, para poder puxar para cá, para alimentar essa planilha Que eu puxo aqui, mas na hora que eu puxo é para eu poder confirmar Dado correto, data de admissão, qual que é o cargo, jornada do servidor Depois que eu fiz isso, aí eu volto para essa aqui Para eu poder colocar manual, nome, matrícula
+
+[00:22:16] Falante 1: Ótimo Então o que a gente pode fazer a nível de teste, tá pessoal? Esse é o que funciona mais pesado, o seu, de digitar ali?
+
+[00:22:24] Falante 2: É chato, porque tem meses que a gente tem vários contratos.
+
+[00:22:30] Falante 1: Alguma dúvida? Como é que você sabe ali qual que você precisa preencher pra lá?
+
+[00:22:34] Falante 2: Você fala...
+
+[00:22:35] Falante 1: Como é que você sabe qual que você tem que preencher ali?
+
+[00:22:39] Falante 2: Você fala como que eu alimento aqui.
+
+[00:22:41] Falante 1: É, porque assim, você começa pesquisando aqui, né? Esse número vem de onde?
+
+[00:22:45] Falante 2: Esse é o número da matrícula.
+
+[00:22:46] Falante 1: Não, mas aonde você busca isso?
+
+[00:22:47] Falante 2: As meninas da admissão fazem o cadastro dentro do Turmalina.
+
+[00:22:50] Falante 1: Tá, então eles fazem e dá, ó. Entrou João, entrou os dois? Os dois é matrícula 2880 e 2881. Aí trabalhou tal dia, de tal dia a tal dia, aí ele teria que entrar aqui e bater 2881.
+
+[00:23:03] Falante 2: Bater o nome aqui e aí já podia puxar aqui pra ver.
+
+[00:23:06] Falante 1: Então beleza. Poderia isso te ajudar aí então.
+
+[00:23:09] Falante 2: Muito.
+
+[00:23:09] Falante 1: Eu só vou fazer um teste desse nesse sentido porque assim, o que você faz é muito mais complexo que isso. Mas se a gente não conseguir evoluir nisso aí, talvez a gente tenha dificuldade. Mas eu acredito que é possível. Aham. Então, pessoal, vamos só mapear esse script dela. Vou deixar vocês aqui no celular. Vocês vão ficar aqui a gravar as telas, tirar os prints, fazer tudo sozinhos. E vai trazer pra gente pra lá. A gente vai criar um script e rodar na máquina dela aqui. Vamos criar uns usuários de teste. Vai verificar o que acontece. Vai conversar com o negócio lá. Só pra você entender o que a gente pode fazer, entendeu?
+
+[00:23:42] Falante 2: Eu preciso que as meninas da admissão já façam o lançamento. Então, quando elas me passam isso aqui, os contratos já estão todos lançados.
+
+[00:23:50] Falante 1: Então, mas elas te passam em Excel ou elas te passam...
+
+[00:23:51] Falante 2: Não, elas me passam físico.
+
+[00:23:53] Falante 1: Pois é, isso aí o sistema não consegue ler, né? Mas isso já tem lá no automático delas?
+
+[00:23:59] Falante 2: Aí, isso aqui vem da secretaria. E o que é que elas fazem? Elas entram aqui, elas entram nos dados pessoais do servidor. Aqui ela já faz Aí aqui ela começa a fazer a inclusão Daquele novo servidor Aí joga tudo aqui Já tem no Turmalina
+
+[00:24:19] Falante 1: Ela não consegue passar só o número? Ela
+
+[00:24:22] Falante 2: conseguiria me passar uma planilha Excel Só que aí pra isso Acho que pra elas também Com a demanda Passou só duas pessoas também Elas deveriam passar pra gente Matrícula, nome, jornada Secretaria que aquele servidor é Porque eu não faço da educação Eu faço as demais Educação a gente tira E eu só mando o e-mail Eu já faço uma planilha em Excel Com matrícula, nome, data de admissão Cargo E já mando para o cenário Então o cenário já copia aquilo ali e já joga na dela Mas também é manual Não puxa nada do sistema Então você que
+
+[00:25:03] Falante 1: pega o contrato
+
+[00:25:06] Falante 2: É eu que pego o contrato por contrato Inclusive até mesmo para a conferência Porque tem servidor que ele não faz jus
+
+[00:25:13] Falante 1: Para o sistema funcionar, ele precisa ser alimentado de alguma forma Então você teria que armar um jeito, talvez, não sei como Se você chegar nessa informação, qual servidor que entrou Os dois entraram, porque aí, vamos pensar nesse fluxo Ele teria essa tabela que as meninas te mandaram Entraria nesse sistema e preencheria automaticamente
+
+[00:25:32] Falante 2: O que a gente tem? Fora a Turmalina, a gente tem um sistema que se chama SIGA Esse sistema também Ele é da Ábaco Ele é alimentado de acordo com o que elas colocam Dentro do SIGA A gente consegue, por exemplo Emitir um relatório de novos admitidos A partir de outubro
+
+[00:25:49] Falante 1: Então em outubro
+
+[00:25:51] Falante 2: Até o final de outubro ele já vai me dar Todo mundo que foi admitido nesse período Com todas as informações Então nós vamos partir
+
+[00:25:58] Falante 1: Vai entrar no SIGA Vai ler lá quem foi admitido O que ela falou Esse sistema vai entrar ali, depois que o sistema vai ler o relatório do SIGA, vai entrar nessa tela ali e vai digitar tudo e depois vai alimentar automaticamente a planilha.
+
+[00:26:16] Falante 2: A planilha.
+
+[00:26:16] Falante 1: Esse fluxo ajudaria. Ajuda. Eu sei que tem muito mais complexo, mas esse ajudaria.
+
+[00:26:21] Falante 2: Ajuda.
+
+[00:26:21] Falante 1: Só pra gente ter algo mais concreto pra desenvolver, entendeu? Vocês entenderam?
+
+[00:26:25] Falante 2: Entendemos.
+
+[00:26:25] Falante 1: Então vamos concentrar nesses dias aqui só nisso. Você vai mostrar pra ela onde que entra no SIGA, ele vai pintar tela por tela, ou ele vai gravar a tela, ou gravar, né? uma dúvida de gravatela e trazer isso lá pra gente. Aí exatamente o que você fizer os cliques que você der no mouse é que eu vou programar.
+
+[00:26:40] Falante 2: Tá. Entendi.
+
+[00:26:42] Falante 1: É exatamente isso. Se eu tivesse acesso à Ábaco, eu pedia pra eles mudarem. Eu vou tentar exprimir, mas provavelmente eu não vou conseguir isso. Então a gente vai tentar fazer como se fosse só a base de dados que você vai, que o sistema vai consultar e vai fazer as informações. Mas é como se fosse você digitar, entendeu?
+
+[00:26:58] Falante 2: Só o computador pode digitar. Ótimo. Já ajuda muito.
+
+[00:27:03] Falante 1: Então vamos fazer assim. Vamos tentar primeiro resolver esse fluxo pequeno. Se a gente conseguir passar por ele, o que vocês acham? Depois eu vou mostrar para vocês como é que se desenvolve. O fluxo do antigo sistema, ele registra cliques, essas coisas? Tipo, interações com as telas, no caso? Com o sistema. O fluxo antigo que os funcionários antigos deixaram da empresa terceirizada? Ah não, eu não sei, acho que não chega a isso, mas podemos mapear isso lá, vou mapear isso lá, eu vou te mandar hoje quando eu chegar lá, porque o que acontece, eles estão chegando na secretaria hoje, você tá arrumando o computador pra eles, aquelas coisas todas, né?
+
+[00:27:41] Falante 2: Se você quiser também eu posso te mandar aquele fluxo por e-mail?
+
+[00:27:44] Falante 1: Não, eu vou te mandar, anota meu e-mail, você vai mandar tudo pra mim que eu te pedi.
+
+[00:27:49] Falante 2: Qual que é o seu?
+
+[00:27:50] Falante 1: Eu vou fazer um teste lá, vou gravar pra você, Gilson Souza,
+
+[00:27:53] Falante 2: ponto
+
+[00:27:55] Falante 1: Souza, é Gilson ponto Souza.
+
+[00:27:58] Falante 2: o resto é o institucional arroba.pnl.tmg.com.br beleza eu te mando?
+
+[00:28:07] Falante 1: pode mandar
+
+[00:28:09] Falante 2: você quer que eu te mande uma cópia dessa planilha? pode tirar os dados
+
+[00:28:13] Falante 1: é muito importante o sistema vai ter que ler tudo o que você faz para ele poder gerar o script ele vai ter que ler isso tudo a única coisa que eu não sei onde que é o SIGA por enquanto, os outros já me mostrou e eu vou ter que pedir um acesso lá no Turmalina para poder ver isso aí melhor
+
+[00:28:30] Falante 2: ele é da Ábaco também só que ele é para emissão de relatório então alguns relatórios muitos na verdade dos relatórios que a gente usa aqui a gente consegue emitir dentro do SIGA por exemplo vou tirar aqui situação de afastamento aqui são todos os servidores da prefeitura, todos sem exceção e aí é que eu consigo converter, eu consigo formatar ele do jeito que eu quero a emissão vou deixar, aqui é todas as informações que a gente tem desse servidor então se você quiser você já pode emitir um relatório com todas essas informações ou então tira e aí depois a gente só gera e é que me dá, se o servidor ele está Se ele está ativo, se ele está afastado pelo INSS, data de admissão, ele vai me dar um relatório dessa forma. Todos os servidores, aí todas as informações que a gente precisa. Então, nós temos folhos complementares. A gente tem a admissão do mês anterior. Essas admissões do mês anterior, por exemplo, isso aqui é todo mundo que entrou em outubro. Aí essas pessoas já estão aqui Só que eu preciso do nosso valor retroativo Então o nosso valor é da parte da data que eles entram E aí, igual no caso, eu estou pagando outubro e novembro Eles só vão entrar na minha planilha Agora, no final de novembro Para crédito em conta em dezembro Tem algumas exceções Mas aí a gente consegue filtrar as informações Dos novos admitidos agora de novembro então se eu jogar aqui do dia primeiro do 11, deixa eu ver se as meninas já fizeram algum tipo de lançamento as
+
+[00:30:41] Falante 2: últimas admissões que a gente tem é mês 10, só pra você poder ter mais ou menos então eu entrei aqui e todo mundo que foi admitido no dia 26 já aparece pra mim só que essas pessoas eu preciso pagar pra elas o valor complementar, que é o valor do mês passado mais a utilização desse mês, e aí ela só vai ter a recarga da planilha no mês seguinte A maioria a gente tem folha complementar.
+
+[00:31:08] Falante 1: E tem um sistema que gera folha complementar? Fazer um relatório que gera folha complementar?
+
+[00:31:13] Falante 2: A gente consegue gerar o analítico. É um relatório dentro do Turmalina mesmo, daquele valor que aquele servidor recebeu durante o mês de outubro.
+
+[00:31:23] Falante 1: É, isso é um pouco mais complexo, mas vamos tentar resolver.
+
+[00:31:27] Falante 2: Mas aí aqui no caso, se ela tivesse já feito alguma admissão em novembro, a gente já conseguiria ver. Elas estão com admissões lá, elas provavelmente ainda não lançou porque está finalizando a complementar. Finaliza a complementar, elas já começam a fazer o lançamento de novembro.
+
+[00:31:43] Falante 1: Eu imagino o seguinte, que para consertar tudo, teria que começar o fluxo desde o início, né?
+
+[00:31:47] Falante 2: Desde onde o cara entra, da admissão.
+
+[00:31:49] Falante 1: Aqui nós estamos pegando o meio do caminho, mas só para teste, tá? Não só testar, só uma tarefa simples para ver se for, eu vou começar no início.
+
+[00:31:57] Falante 2: Sim, aí já começa a admissão, já de uma forma qual que o próprio sistema já me desse essa informação.
+
+[00:32:03] Falante 1: já de repente uma informação que ele busca agora que ele vai usar lá na frente assim não começou na admissão ele passou aqui passou aqui aquele cadáver usado com esse paciente já vai ter buscado ali na frente quando pode
+
+[00:32:14] Falante 2: voltar exatamente uma vez
+
+[00:32:16] Falante 1: completa mas então o que eu vou te pedir manda tudo isso tá eu vou de promete depois que estabilizar lá de mal computador mato pego e colocar nos dois dias aqui pra assim ficar com você então a partir daquele entender o que eu tô precisando de volta da arte faz o script roda de de teste, eu rodo lá de teste primeiro pra isso eu vou conseguir alguns acessos na Ábaco que eu vou dar pedra lá pra vocês de acesso e pode ajustar isso tudo.
+
+[00:32:39] Falante 2: E aí a gente começa com o vale-refeição, depois a gente pode passar pro vale-transporte. Sim, aí
+
+[00:32:43] Falante 1: você vai tudo mapear, vai anotar e nós vamos escrever vale-ponto, script pra vale-refeição depois, validor, vale-refeição
+
+[00:32:50] Falante 2: vale-transporte. Tá. A gente vai beleza.
+
+[00:32:53] Falante 1: Vamos ver como é que vai ser isso aí, a linha de teste, que também é a primeira secreta. Uma vez a gente vai ter muita dificuldade se não vai ter, se vai rodar redondo, se não vai rodar os testes que eu tenho feito também rodam Agora não sei se aqui vai rodar, mas eu acredito que vai rodar mesmo.
+
+[00:33:06] Falante 2: Vai sim.
+
+[00:33:08] Falante 1: Então podemos combinar assim então?
+
+[00:33:09] Falante 2: Pode. Eu te mando tudo por e-mail. Eu te mando as planilhas, te mando o POP e o fluxo.
+
+[00:33:19] Falante 1: Pode ser?
+
+[00:33:24] Falante 2: Pode ser. Combinando.
+
+[00:33:32] Falante 2: Tá, tá. Combinado. Obrigada, gente.
+
+[00:33:36] Falante 1: Pode falar, tá bom? Tá bom.
+
+[00:33:38] Falante 2: Te mandava. Valeu, obrigado.
+
+[00:33:40] Falante 1: Fala, pessoal. Até mais. Tchau, tchau.
+
