@@ -1,5 +1,5 @@
 {
-  "url_abaco": "https://www.abaco.com.br",
+  "url_abaco": "https://mgnl.abaco.com.br/eturmalina/",
   "arquivo_fluxo": "fluxo_gravado.py",
   "planilha": "dados.xlsx",
   "relatorio": "relatorio_observacao",
@@ -19,79 +19,163 @@
     }
   },
   "beneficios": {
+    "versao": 3,
     "feriados_municipais": {},
     "pontos_facultativos": {},
     "secretaria_educacao_contem": "educa",
+    "afastamentos_sem_direito": [
+      "previdencia",
+      "inss",
+      "sem vencimento",
+      "vacancia",
+      "incapacidade",
+      "invalidez",
+      "susp"
+    ],
     "situacoes_excluir": [
       "exonera",
       "demitid",
       "falecid",
-      "aposentad",
-      "rescis",
-      "desligad"
+      "desligad",
+      "rescis"
     ],
     "situacoes_verificar": [
-      "afastad",
-      "licenc",
-      "inss",
-      "suspens"
-    ],
-    "exclusoes": [
-      {
-        "campo": "vinculo",
-        "contem": "agente politico",
-        "motivo": "Agente político não recebe (E1)"
-      },
-      {
-        "campo": "vinculo",
-        "contem": "cedid",
-        "motivo": "Servidor cedido não recebe (E2)"
-      },
-      {
-        "campo": "vinculo",
-        "contem": "pss",
-        "ano_admissao": 2022,
-        "motivo": "PSS de 2022 não faz jus (E3)"
-      }
+      "aposentacao"
     ],
     "vr": {
-      "valor_dia_por_jornada": {
-        "4h30": null,
-        "6h": null,
-        "12h": null,
-        "40h": null
+      "valor_dia_por_tipo": {
+        "NORMAL": 56.0,
+        "PLANTÃO": 84.0,
+        "DIFERENCIADO": 42.0,
+        "DIFERENCIADO 2": 28.0
       },
+      "limite_salarial": 5662.23,
+      "tipos_com_limite_salarial": [
+        "DIFERENCIADO",
+        "DIFERENCIADO 2"
+      ],
+      "horas_para_tipo": {
+        "40": "NORMAL",
+        "30": "DIFERENCIADO",
+        "25": "DIFERENCIADO",
+        "20": "DIFERENCIADO 2",
+        "12": "PLANTÃO"
+      },
+      "plantao_padrao": 15,
+      "exclusoes": [
+        {
+          "campo": "vinculo",
+          "contem": "estagi",
+          "motivo": "Estagiário não recebe (E1)"
+        },
+        {
+          "campo": "vinculo",
+          "contem": "aposentad",
+          "motivo": "Aposentado não recebe (E1)"
+        },
+        {
+          "campo": "vinculo",
+          "contem": "pensionista",
+          "motivo": "Pensionista não recebe (E1)"
+        },
+        {
+          "campo": "vinculo",
+          "contem": "sentenca",
+          "motivo": "Sentença judicial/indenização: não é servidor em exercício (E1)"
+        },
+        {
+          "campo": "secretaria",
+          "contem": "inativos",
+          "motivo": "Servidor inativo não recebe (E1)"
+        }
+      ],
       "layout_importacao": [
         [
           "Matrícula",
           "matricula"
         ],
         [
-          "Nome",
-          "nome"
-        ],
-        [
-          "Quantidade",
-          "quantidade"
+          "Valor",
+          "valor_total"
         ]
       ]
     },
     "va": {
       "ativo": true,
-      "valor_mensal": null,
-      "com_falta": "revisar",
-      "layout_importacao": [
+      "valor_credito": 400.0,
+      "valor_desconto": 1.0,
+      "com_falta": "perde",
+      "inclui_educacao": true,
+      "afastamentos_sem_direito": [
+        "sem vencimento",
+        "sem remuneracao",
+        "vacancia",
+        "incapacidade",
+        "invalidez",
+        "susp"
+      ],
+      "exclusoes": [
+        {
+          "campo": "vinculo",
+          "contem": "estagi",
+          "motivo": "Estagiário não recebe (E1)"
+        },
+        {
+          "campo": "vinculo",
+          "contem": "aposentad",
+          "motivo": "Aposentado não recebe (E1)"
+        },
+        {
+          "campo": "vinculo",
+          "contem": "pensionista",
+          "motivo": "Pensionista não recebe (E1)"
+        },
+        {
+          "campo": "vinculo",
+          "contem": "sentenca",
+          "motivo": "Sentença judicial/indenização: não é servidor em exercício (E1)"
+        },
+        {
+          "campo": "secretaria",
+          "contem": "inativos",
+          "motivo": "Servidor inativo não recebe (E1)"
+        },
+        {
+          "campo": "vinculo",
+          "contem": "politic",
+          "motivo": "Agente político não recebe VA (E2)"
+        },
+        {
+          "campo": "vinculo",
+          "contem": "proc sel",
+          "ano_admissao": 2022,
+          "motivo": "PSS de 2022 não faz jus ao VA (E3)"
+        },
+        {
+          "campo": "vinculo",
+          "contem": "pss",
+          "ano_admissao": 2022,
+          "motivo": "PSS de 2022 não faz jus ao VA (E3)"
+        }
+      ],
+      "layout_credito": [
         [
           "Matrícula",
           "matricula"
         ],
         [
-          "Nome",
-          "nome"
+          "Valor",
+          "valor"
+        ]
+      ],
+      "layout_desconto": [
+        [
+          "Matrícula",
+          "matricula"
         ],
         [
           "Valor",
-          "valor"
+          "desconto"
         ]
       ]
     },
