@@ -32,6 +32,7 @@ import copy
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -41,9 +42,39 @@ from pathlib import Path
 # Empacotado pelo PyInstaller (AutomacaoAbaco.exe): o Python e as bibliotecas
 # vêm dentro do programa, e não há "python" no computador.
 EMPACOTADO = bool(getattr(sys, "frozen", False))
+
+
+def _pasta_navegadores_padrao():
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") \
+            / "ms-playwright"
+    return Path.home() / ".cache" / "ms-playwright"
+
+
+# O Playwright, dentro de um .exe do PyInstaller, procura o Chromium DENTRO do
+# programa (PLAYWRIGHT_BROWSERS_PATH=0), mas o download grava em
+# %LOCALAPPDATA%\ms-playwright. Fixando a pasta aqui, os dois usam a mesma.
+if not os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(_pasta_navegadores_padrao())
 # config.json, entrada/ e saida/ ficam ao lado do programa (.py ou .exe)
 PASTA = (Path(sys.executable) if EMPACOTADO else Path(__file__)).resolve().parent
 CONFIG = PASTA / "config.json"
+# No .exe de arquivo único, o config.json padrão vai DENTRO do programa
+# (pasta temporária do PyInstaller). O que vale é o que fica ao lado do .exe:
+# na 1ª vez ele é copiado para lá, onde pode ser editado e salvo.
+CONFIG_EMBUTIDO = Path(getattr(sys, "_MEIPASS", PASTA)) / "config.json"
+
+
+def _copiar_config_embutido():
+    if EMPACOTADO and not CONFIG.exists() and CONFIG_EMBUTIDO.is_file() \
+            and CONFIG_EMBUTIDO.resolve() != CONFIG.resolve():
+        try:
+            shutil.copyfile(CONFIG_EMBUTIDO, CONFIG)
+        except OSError:
+            pass    # pasta só de leitura: carregar_config lê o embutido
+
+
+_copiar_config_embutido()
 
 PADRAO = {
     "url_abaco": "https://www.abaco.com.br",   # troque pela URL real
@@ -52,6 +83,19 @@ PADRAO = {
     "relatorio": "relatorio_observacao",       # gera .json e .md
     "mostrar_navegador": True,
     "reproduzir_devagar": False,               # pausa de 0,6 s entre ações
+    # tela Dados Funcionais do Servidor (consulta de admissões)
+    "tela_dados_funcionais": "servlet/hwmdadosfuncionaisservidor",
+    # SIGA: Recursos Humanos > Relação de Servidores Admitidos no Período
+    "url_siga": "https://mgnl.abaco.com.br/siga/default.aspx",
+    "siga_consulta_admitidos": "Consulta.aspx?cid=402&ConsultaSalva=245",
+    "arquivo_fluxo_siga": "fluxo_siga.py",      # login do SIGA gravado
+    "siga_usuario": "",                        # login do SIGA (se não houver
+    "siga_senha": "",                          #   fluxo gravado)
+    # planilha dos admitidos (mesma do programa "003 - GILSON")
+    "planilha_admissoes_siga": "admissoes.xlsx",   # na pasta do programa
+    "admissoes_qtde": 19,                      # QTDE de cada admitido novo
+    "admissoes_valor": 56,                     # VALOR de cada admitido novo
+    "abrir_planilha_admissoes": True,          # abre no Excel ao terminar
     "pasta_entrada": "entrada",                # relatórios do mês
     "pasta_saida": "saida",                    # planilhas geradas
     # Conferir: seletores da tela de consulta do servidor na Ábaco.
@@ -109,9 +153,11 @@ def mesclar(base, extra):
 
 def carregar_config():
     cfg = copy.deepcopy(PADRAO)
-    if CONFIG.exists():
+    fonte = CONFIG if CONFIG.exists() else \
+        (CONFIG_EMBUTIDO if EMPACOTADO and CONFIG_EMBUTIDO.is_file() else None)
+    if fonte:
         try:
-            mesclar(cfg, json.loads(CONFIG.read_text(encoding="utf-8")))
+            mesclar(cfg, json.loads(fonte.read_text(encoding="utf-8")))
         except Exception:
             pass    # config com erro: segue com o padrão (a tela avisa)
     return cfg
@@ -231,21 +277,92 @@ def _comando_playwright(*args):
     return [node, cli, *args], get_driver_env()
 
 
-def _rodar(comando, ui, env=None):
-    """Roda um comando mostrando a saída linha a linha. Devolve o código."""
+def _rodar(comando, ui, env=None, saida=None):
+    """Roda um comando mostrando a saída linha a linha. Devolve o código.
+    saida: lista que recebe as linhas (para entender um erro depois)."""
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     env = dict(env or os.environ, PYTHONIOENCODING="utf-8")
     proc = subprocess.Popen(comando, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True,
                             encoding="utf-8", errors="replace",
                             creationflags=flags, env=env, cwd=PASTA)
+    ultima_barra = ""
     for linha in proc.stdout:
-        if linha.strip():
-            ui.log(linha.rstrip())
+        texto = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", linha).rstrip()   # sem cores
+        if saida is not None and texto.strip():
+            saida.append(texto)
+        # a barra de progresso do download vem em muitas linhas: mostra de 10 em 10%
+        m = re.search(r"\|\s*(\d+)%", texto)
+        if m:
+            faixa = m.group(1)[:-1] or "0"
+            if faixa == ultima_barra and m.group(1) != "100":
+                continue
+            ultima_barra = faixa
+        if texto.strip():
+            ui.log(texto)
         if ui.cancelado:
             proc.terminate()
             raise Cancelado()
     return proc.wait()
+
+
+def _ambiente_de_download(env):
+    """Rede da Prefeitura: o motor do navegador (node) não usa sozinho o proxy
+    nem os certificados do Windows, como o Edge usa. Aqui ele passa a usar os
+    dois (sem desligar a verificação de segurança)."""
+    import urllib.request
+    env = dict(env)
+    opcoes = env.get("NODE_OPTIONS", "")
+    # certificados do Windows (se ninguém já escolheu outra origem de certificados)
+    if not any(x in opcoes for x in ("--use-system-ca", "--use-openssl-ca",
+                                     "--use-bundled-ca")):
+        env["NODE_OPTIONS"] = (opcoes + " --use-system-ca").strip()
+    env.setdefault("PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT", "120000")
+    try:
+        proxies = urllib.request.getproxies()     # proxy configurado no Windows
+    except Exception:
+        proxies = {}
+    http = proxies.get("http") or proxies.get("https")
+    if http and not any(env.get(k) for k in ("HTTPS_PROXY", "https_proxy",
+                                              "HTTP_PROXY", "http_proxy")):
+        if "://" not in http:
+            http = "http://" + http
+        env["HTTPS_PROXY"] = env["HTTP_PROXY"] = http
+    return env
+
+
+_ENDERECOS_DOWNLOAD = ("cdn.playwright.dev e playwright.download.prss.microsoft.com")
+
+
+def _explicar_erro_download(linhas, codigo):
+    texto = "\n".join(linhas[-40:]).lower()
+    if any(x in texto for x in ("certificate", "self-signed", "self signed",
+                                "unable_to_get_issuer", "unable to get local issuer",
+                                "unable_to_verify", "cert_")):
+        return ("a rede bloqueou a conexão segura (certificado). O programa já "
+                "tentou com os certificados do Windows. Peça ao TI para liberar o "
+                f"download de {_ENDERECOS_DOWNLOAD}.")
+    if "407" in texto or "proxy" in texto:
+        return ("o proxy da rede pediu autenticação ou recusou a conexão. Peça ao "
+                f"TI para liberar {_ENDERECOS_DOWNLOAD}, ou configure o proxy do "
+                "Windows (Configurações > Rede > Proxy).")
+    if any(x in texto for x in ("enotfound", "getaddrinfo", "etimedout",
+                                "econnrefused", "econnreset", "socket hang up",
+                                "timeout")):
+        return ("não houve conexão com o servidor de download (internet, proxy ou "
+                f"bloqueio). Endereços usados: {_ENDERECOS_DOWNLOAD}.")
+    if any(x in texto for x in ("eperm", "eacces", "operation not permitted",
+                                "access is denied", "acesso negado", "ebusy")):
+        return ("o Windows ou o antivírus não deixou gravar o navegador em "
+                f"{_pasta_navegadores()}. Feche o programa, tente de novo e, se "
+                "continuar, peça ao TI para liberar essa pasta.")
+    if any(x in texto for x in ("no space", "enospc")):
+        return "falta espaço em disco (o Chromium ocupa uns 400 MB)."
+    return f"o download terminou com o código {codigo}. Veja as mensagens acima."
+
+
+def _pasta_navegadores():
+    return os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or str(_pasta_navegadores_padrao())
 
 
 def bibliotecas_instaladas():
@@ -309,17 +426,30 @@ def instalar_dependencias(ui):
         if codigo != 0:
             raise RuntimeError(f"A instalação das bibliotecas falhou (código "
                                f"{codigo}). Verifique a internet e tente de novo.")
-    ui.log(">> Baixando o navegador controlado (Chromium)...")
+    ui.log(">> Baixando o navegador controlado (Chromium, uns 300 MB)...")
+    ui.log(f"   destino: {_pasta_navegadores()}")
     comando, env = _comando_playwright("install", "chromium")
-    codigo = _rodar(comando, ui, env)
+    env = _ambiente_de_download(env)
+    if env.get("HTTPS_PROXY"):
+        ui.log(f"   usando o proxy do Windows: {env['HTTPS_PROXY']}")
+    linhas = []
+    try:
+        codigo = _rodar(comando, ui, env, linhas)
+    except OSError as e:
+        # o Windows não deixou abrir o motor (política do TI / antivírus)
+        codigo, linhas = -1, [str(e)]
+        ui.log(f"   O Windows não deixou abrir o motor do navegador: {e}")
     if codigo != 0:
+        motivo = _explicar_erro_download(linhas, codigo)
         _, nome = navegador_do_windows()
         if not nome:
-            raise RuntimeError(f"O download do navegador falhou (código {codigo}) e "
-                               f"não há Edge nem Chrome no computador. "
-                               f"Verifique a internet e tente de novo.")
-        ui.log(f"Não consegui baixar o Chromium (código {codigo}). "
-               f"Sem problema: o robô vai usar o {nome}.")
+            raise RuntimeError(f"Não consegui baixar o Chromium: {motivo} E não há "
+                               f"Edge nem Chrome no computador para o robô usar.")
+        ui.log(f"Não consegui baixar o Chromium: {motivo}")
+        ui.log(f"Sem problema: o robô funciona com o {nome} do Windows "
+               f"(o Chromium é opcional).")
+    elif chromium_baixado():
+        ui.log("Chromium baixado e pronto.")
     ui.log("Instalação concluída.")
 
 
@@ -610,10 +740,11 @@ def gerar_relatorio(cfg, eventos, ui):
 # ==========================================================================
 # GRAVAR FLUXO  (depois de decidir automatizar)
 # ==========================================================================
-def gravar(cfg, ui):
-    """Abre o gravador do Playwright; devolve o arquivo com o fluxo."""
+def gravar(cfg, ui, arquivo=None, url=None):
+    """Abre o gravador do Playwright; devolve o arquivo com o fluxo.
+    arquivo/url: outro destino e endereço (ex.: o login do SIGA)."""
     _playwright()
-    saida = PASTA / cfg["arquivo_fluxo"]
+    saida = PASTA / (arquivo or cfg["arquivo_fluxo"])
     ui.log(f"Gravando em {saida}. Faça login, execute a tarefa UMA vez e "
            f"FECHE o navegador ao terminar.")
     comando, env = _comando_playwright("codegen", "--target", "python",
@@ -622,7 +753,7 @@ def gravar(cfg, ui):
     if canal and not chromium_baixado():
         ui.log(f"Chromium não baixado; gravando com o {nome}.")
         comando += ["--channel", canal]
-    codigo = _rodar(comando + [cfg["url_abaco"]], ui, env)
+    codigo = _rodar(comando + [url or cfg["url_abaco"]], ui, env)
     if codigo != 0:
         raise RuntimeError(f"A gravação terminou com problema (código {codigo}).")
     ui.log(f"Fluxo salvo em: {saida}")
@@ -634,7 +765,9 @@ def gravar(cfg, ui):
 _IGNORAR = ("browser =", "context =", "page = context.new_page", "context.close(",
             "browser.close(", "page.close(", "#")
 # o que marca um passo da tela de login do e-Turmalina
-_LOGIN = ("vUSULOGIN", "vUSUSENHA", "ENTRAR", "hwlogin")
+# (e-Turmalina: vUSULOGIN/vUSUSENHA/ENTRAR; SIGA: txtUsuario/txtSenha/Logar.aspx)
+_LOGIN = ("vUSULOGIN", "vUSUSENHA", "ENTRAR", "hwlogin", "txtUsuario", "txtSenha",
+          "Logar.aspx", 'name="Entrar"')
 # senhas que não são senha (o arquivo foi "limpo")
 _SENHA_FALSA = {"", "senha", "********", "sua senha", "xxx", "xxxx"}
 
@@ -683,7 +816,7 @@ def passos_do_fluxo(texto):
 def _senha_do_login(login):
     import re as _re
     for c in login:
-        if "vUSUSENHA" in c:
+        if "vUSUSENHA" in c or "txtSenha" in c:
             m = _re.search(r'\.fill\((["\'])(.*)\1\)', c)
             if m:
                 return m.group(2)
@@ -1170,11 +1303,13 @@ def _diagnostico(page, passo, i, destino, ui):
 def _na_tela_de_login(page):
     """True se a página (ou um quadro dela) mostra o formulário de login."""
     try:
-        if "hwlogin" in page.url.lower():
+        url = page.url.lower()
+        if "hwlogin" in url or "logar.aspx" in url:
             return True
         for quadro in page.frames:
             try:
-                if quadro.locator("#vUSULOGIN").count() > 0:
+                if quadro.locator("#vUSULOGIN, #ctl00_ContentPlaceHolder1_txtUsuario") \
+                        .count() > 0:
                     return True
             except Exception:
                 pass
@@ -1203,13 +1338,13 @@ def _fazer_login(page, ui, login, minutos=10):
 
     senha = _senha_do_login(login)
     if senha is not None and senha.strip().lower() not in _SENHA_FALSA:
-        ui.log("Entrando no sistema com o usuário e a senha do fluxo gravado...")
+        ui.log("Entrando no sistema com o usuário e a senha gravados...")
         try:
             for c in login:
                 # só o que importa: abrir a página, digitar e apertar ENTRAR.
                 # Cliques soltos (em campos ou células da tela) são pulados.
                 essencial = (c.startswith("page.goto(") or ".fill(" in c
-                             or ".press(" in c or "ENTRAR" in c)
+                             or ".press(" in c or "entrar" in c.lower())
                 if not essencial:
                     continue
                 c = c.replace(".dblclick(", ".click(")   # duplo clique = 2 envios
@@ -1246,7 +1381,7 @@ def _depois_do_login(page, ui):
         page.wait_for_load_state("load", timeout=20000)
     except Exception:
         pass
-    ui.log("Login feito. Repetindo os passos...")
+    ui.log("Login feito.")
 
 
 def _esperar_fechar(page, navegador, ui):
@@ -1557,6 +1692,1073 @@ def conferir_na_abaco(cfg, ano, mes, ui):
     ui.log(f"{len(linhas) - erros} ok, {erros} com erro (essas ficam com os "
            f"dados do SIGA). O cálculo usa os dados da Ábaco e lista as divergências.")
     return destino
+
+
+# ---- CONSULTA DE ADMISSÕES (Dados Funcionais do Servidor), em lote
+# Caminho do e-Turmalina (de fluxo_consulta_admissao.py): GESTÃO DE PESSOAS >
+# Dados Funcionais do Servidor > Matrícula + Consultar > linha da grade >
+# ícone "Eventos funcionais do servidor" > ficha (Dados da nomeação/do cargo).
+TELA_DADOS_FUNCIONAIS = "servlet/hwmdadosfuncionaisservidor"
+CARGA_COLUNAS = ["MAT", "NOME", "SITUAÇÃO", "TIPO", "DEDUÇÃO ATESTADO",
+                 "DEDUÇÃO DE FALTAS", "DEDUÇÃO DE FÉRIAS", "TOTAL DEDUÇÕES",
+                 "QTDE", "VALOR", "DESCONTO", "TOTAL", "REEMBOLSO", "OBSERVAÇÃO"]
+
+
+def ler_lista_matriculas(texto):
+    """'22771', '22771;1', '22771 1', '22771-1' por linha -> [(mat, cnt|None)],
+    sem repetir. Ignora o que não começa com número."""
+    import re as _re
+    itens, vistos = [], set()
+    for bruta in (texto or "").splitlines():
+        m = _re.match(r"\s*0*(\d{1,10})(?:\s*[;,\t\- /]\s*0*(\d{1,3}))?\b", bruta)
+        if not m:
+            continue
+        item = (m.group(1), m.group(2))
+        if item not in vistos:
+            vistos.add(item)
+            itens.append(item)
+    return itens
+
+
+def matriculas_da_planilha(caminho):
+    """Lê a coluna de matrícula (e a de contrato/Cnt, se houver) de uma
+    planilha. Devolve o texto para a caixa de matrículas."""
+    import pandas as pd
+    import regras_beneficios as rb
+    caminho = Path(caminho)
+    folhas = []
+    if caminho.suffix.lower() in (".xlsx", ".xlsm", ".xls"):
+        try:        # todas as abas; a CARGA (planilha da Divisão) primeiro
+            todas = pd.read_excel(caminho, sheet_name=None, header=None, dtype=str)
+            nomes = list(todas)
+            folhas = [todas[n] for n in sorted(nomes, key=lambda n: rb.norm(n) != "carga")]
+        except Exception:
+            folhas = []
+    if not folhas:
+        folhas = [rb.ler_planilha(caminho)]
+    nomes_mat = {"matricula", "mat", "matr", "matricula servidor", "n matricula"}
+    nomes_cnt = {"cnt", "contrato", "vinculo", "n contrato", "seq", "sequencia"}
+    for bruto in folhas:
+        txt = _matriculas_da_folha(bruto, nomes_mat, nomes_cnt)
+        if txt is not None:
+            return txt
+    raise RuntimeError("Não achei uma coluna 'Matrícula' (ou 'MAT') nas primeiras "
+                       "30 linhas de nenhuma aba da planilha.")
+
+
+def _matriculas_da_folha(bruto, nomes_mat, nomes_cnt):
+    import regras_beneficios as rb
+    for i in range(min(len(bruto), 30)):
+        cab = [rb.norm(v) for v in bruto.iloc[i].tolist()]
+        if any(c in nomes_mat for c in cab):
+            cm = next(j for j, c in enumerate(cab) if c in nomes_mat)
+            cc = next((j for j, c in enumerate(cab) if c in nomes_cnt), None)
+            linhas = []
+            for _, r in bruto.iloc[i + 1:].iterrows():
+                mat = rb.norm(r.iloc[cm]).replace(" ", "")
+                if not mat.isdigit():
+                    continue
+                cnt = rb.norm(r.iloc[cc]).replace(" ", "") if cc is not None else ""
+                linhas.append(f"{int(mat)};{int(cnt)}" if cnt.isdigit() else str(int(mat)))
+            return "\n".join(linhas)
+    return None
+
+
+def novos_para_consultar(cfg, ano, mes):
+    """Texto da caixa de matrículas com os novos admitidos da competência
+    (relatório do SIGA na entrada, fora da base do mês anterior)."""
+    import regras_beneficios as rb
+    regras = regras_do_config(cfg)
+    novos = rb.novos_admitidos(pasta_entrada(cfg), ano, mes, regras,
+                               arquivo_carga_anterior(cfg, ano, mes))
+    return "\n".join(f"{m}    {n}" for m, n in novos), len(novos)
+
+
+def matriculas_do_siga(cfg, ui, ano, mes):
+    """Entra no SIGA, emite 'Relação de Servidores Admitidos no Período'
+    (Recursos Humanos) do dia 1º do mês atual até hoje (o dia em que o botão
+    foi usado: em 25/12, de 01/12 a 25/12), exporta em XLSX e devolve
+    (texto da caixa de matrículas, resumo). Fica de fora quem já está na
+    planilha base e os da Educação (regra dos novos admitidos). Só consulta."""
+    import time
+    from datetime import timedelta
+    from urllib.parse import urljoin
+    import regras_beneficios as rb
+    sync_playwright = _playwright()
+    devagar = bool(cfg.get("reproduzir_devagar", False))
+    fim = date.today()
+    ini = fim.replace(day=1)          # do 1º dia do mês atual até hoje
+    url_siga = cfg.get("url_siga") or PADRAO["url_siga"]
+    url_consulta = urljoin(url_siga, cfg.get("siga_consulta_admitidos")
+                           or PADRAO["siga_consulta_admitidos"])
+    login = _login_siga(cfg)
+    planilha_adm = arquivo_admissoes_siga(cfg)
+    if not _arquivo_livre(planilha_adm):        # igual ao programa do Gilson
+        raise RuntimeError(
+            f"A planilha '{planilha_adm.name}' está aberta no Excel. O Windows não "
+            f"deixa gravar enquanto ela estiver aberta.\nO QUE FAZER: feche a "
+            f"planilha no Excel e clique em 'Puxar matrículas do SIGA' de novo.")
+    pasta = pasta_entrada(cfg)
+    pasta.mkdir(parents=True, exist_ok=True)
+    destino = pasta / f"siga_admitidos_{ini:%Y-%m-%d}_a_{fim:%Y-%m-%d}.xlsx"
+    ui.log(f"SIGA: admitidos de {ini:%d/%m/%Y} a {fim:%d/%m/%Y} (do início do mês "
+           f"atual até hoje).")
+
+    with sync_playwright() as p:
+        navegador = abrir_navegador(p, cfg, devagar=600 if devagar else 80,
+                                    visivel=True)
+        context = navegador.new_context(accept_downloads=True)
+        page = context.new_page()
+        page.set_default_timeout(30000)
+        try:
+            page.goto(url_siga)
+            if not login:
+                ui.log("Sem login do SIGA gravado: faça o login no navegador que "
+                       "abriu (ou use 'Gravar login do SIGA' para o robô entrar "
+                       "sozinho nas próximas vezes).")
+            _fazer_login(page, ui, login)
+            ui.log("Abrindo Recursos Humanos > Relação de Servidores Admitidos no "
+                   "Período...")
+            page.goto(url_consulta, wait_until="domcontentloaded")
+            if _na_tela_de_login(page):          # a sessão caiu: entra de novo
+                _fazer_login(page, ui, login)
+                page.goto(url_consulta, wait_until="domcontentloaded")
+            campos = page.locator("input[id*='dtlPesquisa'][id$='txtValoresPop']")
+            campos.first.wait_for(state="visible", timeout=30000)
+            if campos.count() < 2:
+                raise RuntimeError("A tela do SIGA não mostrou os dois campos de "
+                                   "DATA ADMISSÃO (inicial e final).")
+            for campo, valor in ((campos.nth(0), f"{ini:%d/%m/%Y} 00:00:00"),
+                                 (campos.nth(1), f"{fim:%d/%m/%Y} 23:59:59")):
+                campo.click()
+                campo.fill(valor)
+                if campo.input_value().strip() != valor:   # máscara: digita devagar
+                    campo.fill("")
+                    campo.press_sequentially(re.sub(r"\D", "", valor), delay=30)
+            page.locator("#ctl00_ContentPlaceHolder1_btnVis").click()
+            ui.log("Consultando no SIGA (pode levar até 1 minuto)...")
+            page.wait_for_url(re.compile(r"ConsultaGridDevExpress", re.I),
+                              timeout=180000)
+            resumo_tela = ""
+            try:
+                resumo_tela = " ".join(page.locator("[class*=dxp-summary], "
+                                                    "[class*=dxpSummary]").first
+                                       .inner_text(timeout=5000).split())
+                ui.log(f"   resultado: {resumo_tela}")
+            except Exception:
+                pass
+            salvo = False
+            try:
+                page.locator("#ctl00_ContentPlaceHolder1_ddlTipoArquivo") \
+                    .select_option("XLSX(SEM FORMATO)")
+                espera = int(cfg.get("siga_espera_download_s") or 120) * 1000
+                with page.expect_download(timeout=espera) as baixado:
+                    page.locator("#ctl00_ContentPlaceHolder1_BtnExport").click()
+                    ui.log("Exportando para Excel...")
+                baixado.value.save_as(destino)
+                salvo = True
+            except Exception as e:
+                ui.log(f"   A exportação não baixou ({str(e).splitlines()[0][:120]}); "
+                       f"lendo a tabela da tela, página por página.")
+            if not salvo:
+                _grade_siga_para_excel(page, destino, ui)
+        finally:
+            _fechar(navegador)
+
+    ui.log(f"Relatório do SIGA salvo em: {destino}")
+    msg_planilha = gravar_admissoes_siga(cfg, destino, ui)
+    txt, resumo = _filtrar_admitidos_siga(cfg, destino, ini, ano, mes, ui)
+    return txt, resumo + "\n\n" + msg_planilha
+
+
+def arquivo_admissoes_siga(cfg):
+    p = Path(cfg.get("planilha_admissoes_siga") or "admissoes.xlsx")
+    return p if p.is_absolute() else PASTA / p
+
+
+def _arquivo_livre(arquivo):
+    """False se o arquivo está aberto (travado) no Excel."""
+    if not Path(arquivo).exists():
+        return True
+    try:
+        with open(arquivo, "a+b"):
+            pass
+        return True
+    except (PermissionError, OSError):
+        return False
+
+
+def _login_siga(cfg):
+    """Login gravado do SIGA; sem ele, usuário e senha das Configurações."""
+    login = _login_do_fluxo(cfg, cfg.get("arquivo_fluxo_siga") or "fluxo_siga.py")
+    usuario = str(cfg.get("siga_usuario") or "").strip()
+    senha = str(cfg.get("siga_senha") or "")
+    if login or not (usuario and senha):
+        return login
+    return [f'page.locator("#ctl00_ContentPlaceHolder1_txtUsuario").fill({usuario!r})',
+            f'page.locator("#ctl00_ContentPlaceHolder1_txtSenha").fill({senha!r})',
+            'page.locator("#ctl00_ContentPlaceHolder1_btnLogar").click()  # Entrar']
+
+
+CAB_ADMISSOES = ["MAT", "NOME", "SITUAÇÃO", "TIPO", "TOTAL DEDUÇÕES", "QTDE",
+                 "VALOR", "DESCONTO", "TOTAL", "REEMBOLSO", "OBSERVAÇÃO"]
+
+
+def _nova_aba_planilha(wb, ws=None):
+    """Aba 'Planilha' com o cabeçalho e o visual da admissoes.xlsx do Gilson."""
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    ws = ws or wb.create_sheet("Planilha", 0)
+    fino = Side(style="thin", color="FFB0C4DE")
+    borda = Border(left=fino, right=fino, top=fino,
+                   bottom=Side(style="medium", color="FF1F497D"))
+    for i, t in enumerate(CAB_ADMISSOES, start=1):
+        c = ws.cell(row=1, column=i, value=t)
+        c.font = Font(name="Segoe UI", size=9, bold=True, color="FF1F497D")
+        c.fill = PatternFill("solid", fgColor="FFF2F5F9")
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = borda
+    for col, w in {"A": 12, "B": 42, "C": 12, "D": 17, "F": 12, "G": 14, "K": 42}.items():
+        ws.column_dimensions[col].width = w
+    ws.auto_filter.ref = "A1:K1"
+    return ws
+
+
+def gravar_admissoes_siga(cfg, relatorio, ui):
+    """Faz o que o programa da pasta '003 - GILSON' faz com o resultado do
+    SIGA: na admissoes.xlsx (aba 'Planilha'), acrescenta cada admitido nas
+    próximas linhas vazias com MAT, NOME, TIPO NORMAL, TOTAL DEDUÇÕES 0,
+    QTDE 19, VALOR 56, DESCONTO 0, TOTAL =F*G-(E*G) e REEMBOLSO 0; apaga a
+    aba Admissoes_Extraidas; deixa a 'Planilha' ativa com as linhas novas
+    selecionadas e abre no Excel. Quem já está na planilha não é repetido."""
+    import openpyxl
+    from openpyxl.worksheet.views import Selection
+    import regras_beneficios as rb
+    arquivo = arquivo_admissoes_siga(cfg)
+
+    bruto = rb.ler_planilha(Path(relatorio))
+    i_cab = next((i for i in range(min(len(bruto), 30))
+                  if "matricula" in [rb.norm(v) for v in bruto.iloc[i].tolist()]), None)
+    if i_cab is None:
+        raise RuntimeError("O relatório do SIGA não tem a coluna MATRICULA.")
+    cab = [rb.norm(v) for v in bruto.iloc[i_cab].tolist()]
+    c_mat = cab.index("matricula")
+    c_nome = cab.index("nome") if "nome" in cab else 0
+    admitidos = []
+    for _, r in bruto.iloc[i_cab + 1:].iterrows():
+        mat = rb.chave_matricula(r.iloc[c_mat])
+        nome = rb._txt(r.iloc[c_nome])
+        if not mat or not str(mat).isdigit():
+            continue
+        admitidos.append((int(mat), nome))
+    ui.log(f"Lidos {len(admitidos)} servidores admitidos no relatório.")
+
+    ui.log(f"Gravando registros na planilha {arquivo.name}...")
+    if arquivo.exists():
+        wb = openpyxl.load_workbook(arquivo)
+    else:
+        wb = openpyxl.Workbook()
+        _nova_aba_planilha(wb, wb.active).title = "Planilha"
+    if "Admissoes_Extraidas" in wb.sheetnames:
+        del wb["Admissoes_Extraidas"]
+    if "Planilha" not in wb.sheetnames:
+        _nova_aba_planilha(wb)
+    ws = wb["Planilha"]
+
+    ultima = 1                                  # última linha com conteúdo
+    for r in range(ws.max_row, 0, -1):
+        if any(ws.cell(row=r, column=c).value not in (None, "")
+               and str(ws.cell(row=r, column=c).value).strip() for c in range(1, 12)):
+            ultima = r
+            break
+    ja = {rb.chave_matricula(ws.cell(row=r, column=1).value)
+          for r in range(2, ultima + 1)} - {None, ""}
+    qtde = cfg.get("admissoes_qtde", 19)
+    valor = cfg.get("admissoes_valor", 56)
+    prox, novos, repetidos = ultima + 1, 0, 0
+    ui.log(f"Inserindo novos dados a partir da linha {prox}...")
+    for mat, nome in admitidos:
+        if str(mat) in ja:
+            repetidos += 1
+            continue
+        ja.add(str(mat))
+        for col, v in enumerate([mat, nome, None, "NORMAL", 0, qtde, valor, 0,
+                                 f"=F{prox}*G{prox}-(E{prox}*G{prox})", 0], start=1):
+            if v is not None:
+                ws.cell(row=prox, column=col, value=v)
+        prox += 1
+        novos += 1
+
+    for aba in wb.worksheets:                   # abre sempre na aba 'Planilha'
+        try:
+            aba.sheet_view.tabSelected = False
+        except Exception:
+            pass
+    sv = ws.sheet_view
+    sv.tabSelected = True
+    if novos:
+        faixa, ativa = f"A{ultima + 1}:K{prox - 1}", f"A{ultima + 1}"
+        if sv.selection:
+            sv.selection[0].sqref, sv.selection[0].activeCell = faixa, ativa
+        else:
+            sv.selection.append(Selection(sqref=faixa, activeCell=ativa))
+    wb.active = wb.sheetnames.index("Planilha")
+    try:
+        wb.save(arquivo)
+    except PermissionError:
+        raise RuntimeError(f"Feche a planilha {arquivo.name} no Excel para salvar "
+                           f"e clique em 'Puxar matrículas do SIGA' de novo.")
+    msg = (f"{novos} registro(s) salvo(s) na aba 'Planilha' de {arquivo.name}"
+           + (f" ({repetidos} já estava(m) lá e não foram repetidos)" if repetidos else "")
+           + ".")
+    ui.log(f"Gravação concluída: {msg}")
+    if cfg.get("abrir_planilha_admissoes", True):
+        ui.log("Abrindo a planilha Excel...")
+        try:
+            abrir_no_sistema(arquivo)
+        except Exception as e:
+            ui.log(f"   Não consegui abrir o Excel ({e}). A planilha está em {arquivo}")
+    return msg
+
+
+def _grade_siga_para_excel(page, destino, ui):
+    """Plano B: lê a grade (DevExpress) da tela, todas as páginas."""
+    import pandas as pd
+    linhas, cab = [], None
+    for pagina in range(1, 200):
+        dados = page.evaluate("""() => {
+          const lim = t => (t || '').replace(/\\s+/g, ' ').trim();
+          const vis = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+          const cab = [...document.querySelectorAll('[class*=dxgvHeader]')].filter(vis)
+                        .map(e => lim(e.innerText)).filter(Boolean);
+          const linhas = [...document.querySelectorAll('tr[id*=DXDataRow]')]
+                        .map(tr => [...tr.cells].map(td => lim(td.innerText)));
+          return {cab, linhas};
+        }""")
+        cab = cab or dados["cab"]
+        linhas.extend(dados["linhas"])
+        prox = page.locator("[class*=dxp-button]:not([class*=dxp-disabled])"
+                            "[onclick*=PBN]")
+        if not prox.count():
+            break
+        ui.log(f"   página {pagina} lida ({len(linhas)} linhas)")
+        antes = page.locator("tr[id*=DXDataRow]").first.inner_text()
+        prox.first.click()
+        for _ in range(60):
+            page.wait_for_timeout(500)
+            try:
+                if page.locator("tr[id*=DXDataRow]").first.inner_text() != antes:
+                    break
+            except Exception:
+                pass
+    if not cab or not linhas:
+        raise RuntimeError("Não consegui ler a tabela do SIGA.")
+    n = len(cab)
+    linhas = [l[-n:] if len(l) >= n else l + [""] * (n - len(l)) for l in linhas]
+    pd.DataFrame(linhas, columns=cab).to_excel(destino, index=False)
+
+
+def _filtrar_admitidos_siga(cfg, arquivo, ini, ano, mes, ui):
+    """Do relatório do SIGA, as matrículas a consultar: admitidas desde ini,
+    fora da base do mês anterior e fora da Educação."""
+    import regras_beneficios as rb
+    bruto = rb.ler_planilha(Path(arquivo))
+    i_cab = next((i for i in range(min(len(bruto), 30))
+                  if "matricula" in [rb.norm(v) for v in bruto.iloc[i].tolist()]), None)
+    if i_cab is None:
+        raise RuntimeError("O relatório do SIGA não tem a coluna MATRICULA.")
+    cab = [rb.norm(v) for v in bruto.iloc[i_cab].tolist()]
+
+    def col(*nomes):
+        return next((cab.index(n) for n in nomes if n in cab), None)
+    c_mat, c_nome, c_adm = col("matricula"), col("nome"), col("admissao", "data admissao")
+    c_org, c_lot = col("orgao", "secretaria"), col("lotacao")
+    c_sit = col("situacao funcional", "situacao")
+    regras = regras_do_config(cfg)
+    try:
+        aliases = rb._aliases(regras)
+        na_base = {b.chave for b in rb.ler_carga_anterior(
+            rb._arquivo_carga(pasta_entrada(cfg), arquivo_carga_anterior(cfg, ano, mes)),
+            aliases)[0]}
+    except Exception as e:
+        na_base = set()
+        ui.log(f"   Sem planilha base para comparar ({str(e).splitlines()[0][:100]}): "
+               f"todas as admissões entram na lista.")
+    linhas, vistos = [], set()
+    total = base = educ = antigas = 0
+    for _, r in bruto.iloc[i_cab + 1:].iterrows():
+        mat = rb.chave_matricula(r.iloc[c_mat])
+        if not mat or not str(mat).isdigit():
+            continue
+        total += 1
+        adm = rb.parse_data(r.iloc[c_adm]) if c_adm is not None else None
+        if adm and adm < ini:
+            antigas += 1
+            continue
+        org = " ".join(str(r.iloc[c]) for c in (c_org, c_lot)
+                       if c is not None and rb._txt(r.iloc[c]))
+        if mat in na_base:
+            base += 1
+            continue
+        if rb._eh_educacao({"secretaria": org}, regras):
+            educ += 1
+            continue
+        if mat in vistos:
+            continue
+        vistos.add(mat)
+        nome = rb._txt(r.iloc[c_nome]) if c_nome is not None else ""
+        extra = [f"admissão {adm:%d/%m/%Y}" if adm else "",
+                 rb._txt(r.iloc[c_sit]) if c_sit is not None else ""]
+        linhas.append(f"{mat}    {nome}    ({', '.join(x for x in extra if x)})")
+    resumo = (f"{total} admissão(ões) no SIGA; {len(linhas)} para consultar"
+              + (f"; {base} já na planilha base" if base else "")
+              + (f"; {educ} da Educação (vão para a SEMED)" if educ else "")
+              + (f"; {antigas} antes de {ini:%d/%m/%Y}" if antigas else "") + ".")
+    ui.log(resumo)
+    return "\n".join(linhas), resumo
+
+
+def _login_do_fluxo(cfg, arquivo=None):
+    """Passos de login do fluxo gravado (para entrar sozinho com a senha que
+    ficou gravada). Sem fluxo, a pessoa faz o login à mão."""
+    original = PASTA / (arquivo or cfg["arquivo_fluxo"])
+    for arq in (_nome_corrigido(original), original):
+        if arq.exists():
+            try:
+                login = separar_fluxo(arq.read_text(encoding="utf-8",
+                                                    errors="replace"))[0]
+                if login:
+                    return login
+            except Exception:
+                pass
+    return []
+
+
+def _aguardar_tela(context, page, procurar, mensagem, segundos=20):
+    """Procura em todas as abas e quadros até procurar(quadro) achar algo."""
+    import time
+    limite = time.time() + segundos
+    while True:
+        for aba in list(context.pages):
+            for quadro in list(aba.frames):
+                try:
+                    achado = procurar(quadro)
+                except Exception:
+                    achado = None
+                if achado is not None:
+                    return achado
+        if time.time() > limite:
+            raise RuntimeError(mensagem)
+        page.wait_for_timeout(250)
+
+
+def _form_dados_funcionais(quadro):
+    import re as _re
+    botao = quadro.get_by_role("button", name="Consultar", exact=True)
+    if botao.count() != 1 or not botao.is_visible():
+        return None
+    rotulo = _re.compile(r"^\s*Matr[íi]cula\s*:?\s*$", _re.I)
+    campos = (
+        quadro.get_by_label(rotulo),
+        quadro.get_by_text(rotulo).locator(
+            "xpath=ancestor::td[1]/following-sibling::td[1]").locator("input:visible"),
+        quadro.locator("input[id*='matric' i]:visible, input[name*='matric' i]:visible"),
+    )
+    for campo in campos:
+        try:
+            if campo.count() == 1 and campo.is_visible() and campo.is_editable():
+                return campo, botao
+        except Exception:
+            continue
+    return None
+
+
+def _linhas_da_grade(quadro, mat):
+    """(quadro, [(linha, {coluna: valor}, cabeçalhos, índice do Cargo)]) das
+    linhas da grade de resultado com essa matrícula."""
+    import re as _re
+    import regras_beneficios as rb
+    cabecalhos = quadro.get_by_text(_re.compile(r"^\s*Cnt\s*\.?\s*$", _re.I)) \
+        .locator("xpath=ancestor::tr[1]")
+    grades = []
+    for cab in cabecalhos.all():
+        textos = [" ".join(t.split()) for t in
+                  cab.locator(":scope > th, :scope > td").all_inner_texts()]
+        chaves = [rb.norm(t) for t in textos]
+        if "matricula" in chaves and "cnt" in chaves:
+            grades.append((cab.locator("xpath=ancestor::table[1]"), textos, chaves))
+    if not grades:
+        return None
+    achados = []
+    for grade, textos, chaves in grades:
+        i_mat = chaves.index("matricula")
+        for linha in grade.locator("tr:visible").all():
+            valores = [" ".join(v.split()) for v in
+                       linha.locator(":scope > td").all_inner_texts()]
+            if len(valores) <= i_mat or valores[i_mat].lstrip("0") != mat.lstrip("0"):
+                continue
+            dados = {textos[k]: valores[k] for k in range(min(len(textos), len(valores)))
+                     if textos[k]}
+            i_cargo = chaves.index("cargo") if "cargo" in chaves else i_mat
+            achados.append((linha, dados, chaves, i_cargo))
+    return (quadro, achados) if achados else None
+
+
+def _icone_eventos(quadro, linha, i_cargo):
+    """O ícone 'Eventos funcionais do servidor' da linha (pelo texto de ajuda;
+    senão, testa os ícones depois de Cargo passando o mouse)."""
+    import re as _re
+    rotulo = "Eventos funcionais do servidor"
+    atributos = ("title", "alt", "aria-label", "data-tooltip", "onmouseover",
+                 "onmouseenter")
+    seletor = ", ".join(f"[{a}*='{rotulo}' i]:visible" for a in atributos)
+    icones = linha.locator(seletor)
+    clicaveis = icones.locator(
+        "xpath=ancestor-or-self::*[self::a or self::button or @role='button'][1]")
+    acao = clicaveis if clicaveis.count() else icones
+    if acao.count() >= 1:
+        return acao.first
+    celulas = linha.locator(":scope > td")
+    candidatos = []
+    for k in range(i_cargo + 1, celulas.count()):
+        cel = celulas.nth(k)
+        ctl = cel.locator("a:visible, button:visible, [role=button]:visible, "
+                          "input[type=image]:visible")
+        if ctl.count() == 0:
+            ctl = cel.locator("img:visible, svg:visible")
+        if ctl.count() == 1:
+            candidatos.append(ctl)
+    if len(candidatos) == 4:     # na tela gravada é o 2º ícone depois de Cargo
+        candidatos = [candidatos[1], candidatos[0], *candidatos[2:]]
+    dica = quadro.get_by_text(_re.compile(
+        r"^\s*Eventos\s+funcionais\s+do\s+servidor\s*$", _re.I))
+    for cand in candidatos:
+        try:
+            cand.hover(timeout=1200)
+            dica.first.wait_for(state="visible", timeout=1500)
+            return cand
+        except Exception:
+            continue
+    return None
+
+
+def _ficha_aberta(quadro):
+    import regras_beneficios as rb
+    corpo = quadro.locator("body")
+    if not corpo.count():
+        return None
+    texto = corpo.inner_text(timeout=1500)
+    n = rb.norm(texto)
+    if "dados da nomeacao" in n and "dados do cargo" in n:
+        return quadro, texto
+    return None
+
+
+_JS_ROTULOS = r"""() => {
+  const limpar = t => (t || '').replace(/\s+/g, ' ').trim();
+  const valorDe = el => {
+    if (!el) return '';
+    const campo = el.matches('input,select,textarea') ? el
+      : el.querySelector('input,select,textarea');
+    if (campo) {
+      if (campo.tagName === 'SELECT')
+        return limpar(campo.selectedOptions[0] ? campo.selectedOptions[0].text : '');
+      return limpar(campo.value);
+    }
+    return limpar(el.innerText);
+  };
+  const pares = [];
+  for (const e of document.querySelectorAll('td,th,span,label,b,strong,div')) {
+    if (e.querySelector('td,table')) continue;
+    const t = limpar(e.innerText);
+    if (!t || t.length > 50 || !t.endsWith(':')) continue;
+    let v = '', s = e.nextElementSibling;
+    while (s && !v) { v = valorDe(s); if (!v) s = s.nextElementSibling; }
+    if (!v && e.parentElement && e.parentElement.tagName !== 'TR') {
+      const p = e.parentElement.nextElementSibling;
+      v = valorDe(p);
+    }
+    if (v && !v.endsWith(':') && v.length < 200)
+      pares.push([t.slice(0, -1).trim(), v]);
+  }
+  return pares;
+}"""
+
+
+def _campos_da_ficha(quadro, texto):
+    """{rótulo: valor} da ficha: pares 'Rótulo:' + valor da tela; o que faltar
+    sai do texto ('Admissão: 03/11/2026')."""
+    import re as _re
+    campos = {}
+
+    def por(rotulo, valor):
+        rotulo, valor = " ".join(rotulo.split()), " ".join(str(valor).split())
+        if not rotulo or not valor or len(rotulo) > 45:
+            return
+        chave, n = rotulo, 2
+        while chave in campos and campos[chave] != valor:
+            chave, n = f"{rotulo} ({n})", n + 1
+        campos.setdefault(chave, valor)
+
+    try:
+        for r, v in quadro.evaluate(_JS_ROTULOS):
+            por(r, v)
+    except Exception:
+        pass
+    existentes = {k.split(" (")[0].lower() for k in campos}
+    for linha in texto.splitlines():
+        for m in _re.finditer(r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 ./º°()-]{1,40}?)\s*:\s*"
+                              r"([^\t:]+?)(?=\t|$|\s{2,}|\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ ./]{1,30}:)",
+                              linha.strip()):
+            if m.group(1).strip().lower() not in existentes:
+                por(m.group(1), m.group(2))
+    return campos
+
+
+def horas_semanais(jornada):
+    """'200/40' -> 40; '40' -> 40; '200' (mensal) -> 40; '' -> None."""
+    import re as _re
+    s = str(jornada or "")
+    m = _re.search(r"(\d+)\s*/\s*(\d+)", s)
+    if m:
+        return int(m.group(2))
+    m = _re.search(r"\d+", s)
+    if not m:
+        return None
+    n = int(m.group(0))
+    return n if n <= 60 else round(n / 5)
+
+
+def _campo(campos, *pedacos, data=False):
+    import regras_beneficios as rb
+    for k, v in campos.items():
+        nk = rb.norm(k)
+        if any(p in nk for p in pedacos):
+            if data and not rb.parse_data(v):
+                continue
+            return v
+    return ""
+
+
+def _consultar_uma(context, page, url, mat, cnt, ui):
+    """Consulta uma matrícula: devolve um registro por contrato (vínculo)."""
+    import re as _re
+    import regras_beneficios as rb
+    registros, k, total = [], 0, None
+    while total is None or k < total:
+        resp = page.goto(url, wait_until="domcontentloaded")
+        if resp is not None and resp.status >= 400:
+            raise RuntimeError(f"O sistema respondeu HTTP {resp.status} ao abrir "
+                               f"Dados Funcionais do Servidor.")
+        campo, consultar = _aguardar_tela(
+            context, page, _form_dados_funcionais,
+            "Não achei o campo Matrícula e o botão Consultar na tela.")
+        campo.fill("")
+        campo.fill(mat)
+        consultar.click()
+        try:
+            quadro, linhas = _aguardar_tela(
+                context, page, lambda q: _linhas_da_grade(q, mat),
+                "sem resultado", segundos=20)
+        except RuntimeError:
+            raise RuntimeError("A consulta não mostrou nenhuma linha para essa "
+                               "matrícula.")
+        if cnt:
+            linhas = [l for l in linhas
+                      if str(_campo(l[1], "cnt")).lstrip("0") == cnt.lstrip("0")]
+            if not linhas:
+                raise RuntimeError(f"A matrícula não tem o contrato {cnt}.")
+        total = len(linhas)
+        linha, grade, chaves, i_cargo = linhas[k]
+        k += 1
+        reg = {"Matrícula": mat, "Cnt": _campo(grade, "cnt"),
+               "Nome": _campo(grade, "servidor", "nome"),
+               "Cargo": _campo(grade, "cargo")}
+        reg.update({f"Grade: {c}": v for c, v in grade.items()
+                    if rb.norm(c) not in ("matricula", "cnt", "servidor", "cargo")})
+        abertas = set(context.pages)
+        icone = _icone_eventos(quadro, linha, i_cargo)
+        if icone is None:
+            reg["Erro"] = "não achei o ícone 'Eventos funcionais do servidor'"
+            registros.append(reg)
+            continue
+        icone.click()
+        try:
+            fq, texto = _aguardar_tela(context, page, _ficha_aberta,
+                                       "A ficha (Dados da nomeação) não abriu.")
+            campos = _campos_da_ficha(fq, texto)
+            if not _re.search(rf"\b0*{mat}\b", texto):
+                reg["Erro"] = "a ficha aberta não mostra essa matrícula"
+            reg["Admissão"] = _campo(campos, "admissao", data=True)
+            reg["Jornada"] = _campo(campos, "jornada", "carga horaria")
+            h = horas_semanais(reg["Jornada"])
+            reg["Horas semanais"] = h if h is not None else ""
+            reg["Lotação/Secretaria"] = _campo(campos, "secretaria", "lotacao",
+                                               "orgao", "unidade")
+            if not reg["Cargo"]:
+                reg["Cargo"] = _campo(campos, "cargo")
+            reg.update({f"Ficha: {c}": v for c, v in campos.items()})
+            reg["_ficha"] = texto
+        finally:
+            for aba in list(context.pages):     # fecha a ficha se abriu em outra aba
+                if aba not in abertas and aba is not page:
+                    try:
+                        aba.close()
+                    except Exception:
+                        pass
+        reg.setdefault("Erro", "")
+        registros.append(reg)
+    return registros
+
+
+def _abrir_gestao_de_pessoas(page):
+    try:
+        page.get_by_role("button", name="GESTÃO DE PESSOAS", exact=True) \
+            .click(timeout=8000)
+        page.get_by_text("Recursos Humanos", exact=True).first \
+            .wait_for(state="visible", timeout=15000)
+    except Exception:
+        pass        # já está no módulo, ou o botão tem outro nome: segue
+
+
+def consultar_admissoes(cfg, ui, itens, ano, mes, salvar_conferencia=True,
+                        devagar=None):
+    """Consulta várias matrículas na tela Dados Funcionais do Servidor e lê a
+    ficha de cada uma (admissão, jornada, cargo, lotação). Grava um Excel com
+    todas (abas CARGA, no formato da Divisão, Consultas e Fichas) e, se pedido, o
+    entrada/conferencia_abaco.xlsx usado no cálculo do VR.
+    itens: [(matrícula, contrato ou None)]. Só consulta, não altera nada."""
+    import time
+    from urllib.parse import urljoin
+    import regras_beneficios as rb
+    sync_playwright = _playwright()
+    if not itens:
+        raise RuntimeError("Informe pelo menos uma matrícula.")
+    if devagar is None:
+        devagar = bool(cfg.get("reproduzir_devagar", False))
+    url = urljoin(cfg["url_abaco"].rstrip("/") + "/",
+                  cfg.get("tela_dados_funcionais") or TELA_DADOS_FUNCIONAIS)
+    login = _login_do_fluxo(cfg)
+    ui.log(f"Consultando {len(itens)} matrícula(s) em Dados Funcionais do Servidor.")
+    registros, inicio, erro_geral = [], time.time(), None
+    try:
+        with sync_playwright() as p:
+            navegador = abrir_navegador(p, cfg, devagar=600 if devagar else 80,
+                                        visivel=True)
+            context = navegador.new_context(accept_downloads=True)
+            page = context.new_page()
+            page.set_default_timeout(20000)
+            try:
+                page.goto(cfg["url_abaco"])
+                _fazer_login(page, ui, login)
+                _abrir_gestao_de_pessoas(page)
+                feitos = set()          # (matrícula, contrato) já lidos
+                for i, (mat, cnt) in enumerate(itens, 1):
+                    if ui.cancelado:
+                        raise Cancelado()
+                    rotulo = f"{mat}" + (f" (contrato {cnt})" if cnt else "")
+                    if (mat, (cnt or "").lstrip("0")) in feitos or (mat, "*") in feitos:
+                        ui.log(f"{i:4}/{len(itens)}  {rotulo:>18}  já consultada acima")
+                        continue
+                    try:
+                        regs = _consultar_uma(context, page, url, mat, cnt, ui)
+                    except Exception as e:
+                        if _na_tela_de_login(page):     # a sessão caiu: entra e repete
+                            ui.log("   O sistema voltou para a tela de login.")
+                            _fazer_login(page, ui, login)
+                            _abrir_gestao_de_pessoas(page)
+                            try:
+                                regs = _consultar_uma(context, page, url, mat, cnt, ui)
+                            except Exception as e2:
+                                e = e2
+                                regs = None
+                        else:
+                            regs = None
+                        if regs is None:
+                            regs = [{"Matrícula": mat, "Cnt": cnt or "",
+                                     "Erro": str(e).splitlines()[0][:200]}]
+                    registros.extend(regs)
+                    for r in regs:
+                        if not r.get("Erro"):
+                            feitos.add((mat, str(r.get("Cnt") or "").lstrip("0")))
+                    if not cnt and regs and not any(r.get("Erro") for r in regs):
+                        feitos.add((mat, "*"))
+                    for r in regs:
+                        ui.log(f"{i:4}/{len(itens)}  {rotulo:>18}  "
+                               + (f"ERRO: {r['Erro']}" if r.get("Erro") else
+                                  f"{r.get('Nome', '')[:35]} | admissão "
+                                  f"{r.get('Admissão') or '?'} | jornada "
+                                  f"{r.get('Jornada') or '?'}"))
+            finally:
+                _fechar(navegador)
+    except Cancelado as e:
+        erro_geral = e
+    if not registros:
+        if erro_geral:
+            raise erro_geral
+        return None
+    arquivos = _gravar_consultas(cfg, registros, ano, mes, salvar_conferencia, ui)
+    ok = sum(1 for r in registros if not r.get("Erro"))
+    ui.log(f"Pronto em {time.time() - inicio:.0f} s: {ok} ok, "
+           f"{len(registros) - ok} com erro. Excel: {arquivos['excel']}")
+    if erro_geral:
+        ui.log("Consulta interrompida: o Excel tem só o que já tinha sido lido.")
+    return {"registros": registros, **arquivos}
+
+
+# Estilo da aba CARGA da planilha da Divisão ('11- NOVEMBRO - 2026'):
+# Calibri 8, tabela Tabela3 (TableStyleLight16), colunas E-G ocultas, QTDE
+# laranja, TOTAL DEDUÇÕES/VALOR/TOTAL em azul claro, moeda contábil.
+_MOEDA_CONTABIL = '_-"R$"\\ * #,##0.00_-;\\-"R$"\\ * #,##0.00_-;_-"R$"\\ * "-"??_-;_-@_-'
+_CARGA_DIVISAO = ["MAT", "NOME", "SITUAÇÃO", "TIPO", "DEDUÇÃO ATESTATO",
+                  "DEDUÇÃO DE FALTAS", "DEDUÇÃO DE FÉRIAS", "TOTAL DEDUÇÕES", "QTDE",
+                  "VALOR", "DESCONTO", "TOTAL", "REEMBOLSO", "OBSERVAÇÃO", "Coluna1"]
+_T = "Tabela3[[#This Row],"
+_FORMULAS_DIVISAO = {
+    8: f'=IF({_T}[TIPO]]="PLANTÃO",0,{_T}[DEDUÇÃO DE FALTAS]]+{_T}[DEDUÇÃO DE FÉRIAS]])',
+    9: "=$I$3",
+    10: (f'=IF({_T}[TIPO]]="NORMAL",$L$2,IF({_T}[TIPO]]="DIFERENCIADO",$L$4,'
+         f'IF({_T}[TIPO]]="PLANTÃO",$L$3,$L$5)))'),
+    12: (f"=IF({_T}[TOTAL DEDUÇÕES]]>{_T}[QTDE]],0*{_T}[VALOR]],"
+         f"(({_T}[QTDE]]-{_T}[TOTAL DEDUÇÕES]])*{_T}[VALOR]])-{_T}[DESCONTO]])"
+         f"+{_T}[REEMBOLSO]]"),
+}
+
+
+def _aba_carga_divisao(wb, registros, ano, mes, cfg, regras):
+    """Aba CARGA idêntica à da planilha da Divisão, com os consultados."""
+    from openpyxl.formatting.rule import Rule
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.styles.colors import Color
+    from openpyxl.styles.differential import DifferentialStyle
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+    import regras_beneficios as rb
+
+    ws = wb.create_sheet("CARGA", 0)
+    wb.active = 0
+    ws.sheet_view.showGridLines = False
+    f8, f8b = Font(name="Calibri", size=8), Font(name="Calibri", size=8, bold=True)
+    dupla = Side(style="double")
+    caixa = Border(left=dupla, right=dupla, top=dupla, bottom=dupla)
+    meio = Alignment(vertical="center")
+    centro = Alignment(horizontal="center", vertical="center")
+    azul = PatternFill("solid", fgColor=Color(theme=4, tint=0.7999816888943144))
+    laranja = PatternFill("solid", fgColor="FFFFC000")
+    amarelo = PatternFill("solid", fgColor="FFFFFF00")
+
+    du, folgas, _ = info_dias_uteis(cfg, ano, mes)
+    vr = regras.get("vr", {})
+    valores = vr.get("valor_dia_por_tipo") or {}
+    limite = vr.get("limite_salarial")
+    lim_txt = (f"R$ {limite:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+               if isinstance(limite, (int, float)) else "o limite do decreto")
+
+    # ---- cabeçalho (linhas 1 a 6), como na planilha da Divisão
+    ws.merge_cells("A1:L1")
+    ws.merge_cells("A6:L6")
+    for rotulo, valor, linha in (("INICIO", date(ano, mes, 1), 2),
+                                 ("FIM", rb.ultimo_dia(ano, mes), 3),
+                                 ("FERIADOS", "; ".join(f"{d:%d/%m} {t}" for d, t in folgas)
+                                  or None, 4)):
+        a, b = ws.cell(linha, 1, rotulo), ws.cell(linha, 2, valor)
+        a.font, a.alignment, a.border = f8b, meio, caixa
+        b.font, b.alignment, b.border = f8, centro, caixa
+        if linha < 4:
+            b.number_format = "mm-dd-yy"
+    h3, i3 = ws["H3"], ws["I3"]
+    h3.value, i3.value = "TOTAL", du
+    h3.font = i3.font = Font(name="Calibri", size=14, bold=True)
+    h3.alignment, i3.alignment = meio, centro
+    h3.border = i3.border = caixa
+    i3.number_format = "0"
+    tipos = [(t, valores.get(t)) for t in ("NORMAL", "PLANTÃO", "DIFERENCIADO",
+                                           "DIFERENCIADO 2")]
+    for i, (t, v) in enumerate(tipos):
+        k, l = ws.cell(2 + i, 11, t), ws.cell(2 + i, 12, v)
+        k.font, k.alignment, k.border = f8b, meio, caixa
+        l.font, l.alignment, l.border = f8, meio, caixa
+        l.number_format = _MOEDA_CONTABIL
+    ws.merge_cells("M2:O2")
+    ws["M2"].border = caixa
+    ws["M2"].font = Font(name="Calibri", size=9)
+    for celula, texto in (("M4", "* Carga horária superior a 6:00 horas inferior a 8:00 "
+                                 f"horas e recebe até {lim_txt}"),
+                          ("M5", "* Carga horária inferior a 6:00 horas recebe até "
+                                 f"{lim_txt}")):
+        ws.merge_cells(f"{celula}:O{celula[1]}")
+        c = ws[celula]
+        c.value, c.fill, c.border = texto, amarelo, caixa
+        c.font = Font(name="Calibri", size=9)
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # ---- tabela (linha 7 em diante)
+    L = 7
+    for j, t in enumerate(_CARGA_DIVISAO, 1):
+        c = ws.cell(L, j, t)
+        c.font = f8
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ultima = L + max(1, len(registros))
+    for i in range(max(1, len(registros))):
+        n = L + 1 + i
+        r = registros[i] if i < len(registros) else {}
+        mat = str(r.get("Matrícula", "") or "")
+        obs = []
+        if r:
+            if r.get("Admissão"):
+                obs.append(f"ADMITIDO EM {r['Admissão']}")
+            if r.get("Jornada"):
+                obs.append(f"JORNADA {r['Jornada']}")
+            if r.get("Cnt") and str(r.get("Cnt")).lstrip("0") not in ("", "1"):
+                obs.append(f"CONTRATO {r['Cnt']}")
+            if not r.get("Tipo sugerido"):
+                obs.append("TIPO A DEFINIR")
+        valores_linha = {1: int(mat) if mat.isdigit() else (mat or None),
+                         2: str(r.get("Nome", "")).upper() or None, 3: None,
+                         4: r.get("Tipo sugerido") or None, 5: 0, 6: 0, 7: 0,
+                         11: 0, 13: 0, 14: " - ".join(obs) or None, 15: None}
+        for j in range(1, len(_CARGA_DIVISAO) + 1):
+            c = ws.cell(n, j, _FORMULAS_DIVISAO.get(j, valores_linha.get(j)))
+            c.font = f8
+            c.alignment = centro if j in (8, 9) else meio
+        ws.cell(n, 1).number_format = "#####"
+        ws.cell(n, 9).number_format = "0"
+        for j in (10, 11, 12, 13):
+            ws.cell(n, j).number_format = _MOEDA_CONTABIL
+        for j in (8, 10, 12):
+            ws.cell(n, j).fill = azul
+        ws.cell(n, 9).fill = laranja
+        ws.row_dimensions[n].height = 20.25
+    tab = Table(displayName="Tabela3", ref=f"A{L}:O{ultima}")
+    tab.tableStyleInfo = TableStyleInfo(name="TableStyleLight16", showRowStripes=True,
+                                        showColumnStripes=False)
+    ws.add_table(tab)
+    dv = DataValidation(type="list", formula1="$K$2:$K$5", allow_blank=True)
+    dv.add(f"D{L + 1}:D{ultima}")
+    ws.add_data_validation(dv)
+    ws.conditional_formatting.add(
+        f"A{L + 1}:A{ultima}",
+        Rule(type="duplicateValues", dxf=DifferentialStyle(
+            font=Font(color="FF9C0006"),
+            fill=PatternFill(bgColor="FFFFC7CE", fill_type="solid"))))
+
+    larguras = [9.71, 34.43, 33.43, 12.29, 12.14, 20.71, 18.0, 12.57, 9.86, 10.71,
+                14.29, 12.86, 12.86, 35.43, 24.43]
+    for j, w_ in enumerate(larguras, 1):
+        ws.column_dimensions[get_column_letter(j)].width = w_
+    for col in "EFG":                       # ocultas, como na planilha da Divisão
+        ws.column_dimensions[col].hidden = True
+    for linha, alt in ((1, 8.25), (2, 34.5), (3, 25.5), (4, 25.5), (5, 25.5),
+                       (6, 15.75), (7, 32.25)):
+        ws.row_dimensions[linha].height = alt
+    return ws
+
+
+
+def _gravar_consultas(cfg, registros, ano, mes, salvar_conferencia, ui):
+    import pandas as pd
+    import regras_beneficios as rb
+    from openpyxl import load_workbook
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+
+    regras = regras_do_config(cfg)
+    vr = regras.get("vr", {})
+    valores = vr.get("valor_dia_por_tipo") or {}
+    horas_tipo = vr.get("horas_para_tipo") or {}
+    du = info_dias_uteis(cfg, ano, mes)[0]
+
+    principais = ["Matrícula", "Cnt", "Nome", "Cargo", "Admissão", "Jornada",
+                  "Horas semanais", "Tipo sugerido", "Lotação/Secretaria", "Erro"]
+    for r in registros:
+        h = r.get("Horas semanais")
+        r["Tipo sugerido"] = horas_tipo.get(str(h), "") if h not in (None, "") else ""
+    extras = []
+    for r in registros:
+        for c in r:
+            if c not in principais and c not in extras and not c.startswith("_"):
+                extras.append(c)
+    extras.sort(key=lambda c: (not c.startswith("Ficha:"), 0))
+    def numero_se_der(v):
+        t = str(v or "").strip()
+        return int(t) if t.isdigit() and len(t) < 12 else v
+    df = pd.DataFrame([{c: (numero_se_der(r.get(c, "")) if c in ("Matrícula", "Cnt")
+                            else r.get(c, "")) for c in principais + extras}
+                       for r in registros])
+
+    pasta = PASTA / cfg["pasta_saida"] / "consultas"
+    pasta.mkdir(parents=True, exist_ok=True)
+    destino = pasta / f"consulta_admissoes_{datetime.now():%Y-%m-%d_%H%M}.xlsx"
+    fichas = pd.DataFrame([{"Matrícula": r.get("Matrícula"), "Cnt": r.get("Cnt"),
+                            "Nome": r.get("Nome", ""),
+                            "Ficha (texto da tela)": r.get("_ficha", "")}
+                           for r in registros])
+    with pd.ExcelWriter(destino, engine="openpyxl") as w:
+        df.to_excel(w, sheet_name="Consultas", index=False)
+        fichas.to_excel(w, sheet_name="Fichas", index=False)
+
+    wb = load_workbook(destino)
+    fonte, negrito = Font(name="Arial", size=10), Font(name="Arial", size=10, bold=True)
+    cabec = PatternFill("solid", fgColor="1F4E78")
+    laranja = PatternFill("solid", fgColor="FFE0B2")
+    for ws in (wb["Consultas"], wb["Fichas"]):
+        for linha in ws.iter_rows():
+            for c in linha:
+                c.font = fonte
+        for c in ws[1]:
+            c.font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+            c.fill = cabec
+            c.alignment = Alignment(wrap_text=True, vertical="center")
+        ws.freeze_panes = "C2"
+    ws = wb["Consultas"]
+    col_erro = principais.index("Erro") + 1
+    for n in range(2, ws.max_row + 1):
+        if ws.cell(n, col_erro).value:
+            for j in range(1, ws.max_column + 1):
+                ws.cell(n, j).fill = laranja
+    larg = {"Matrícula": 10, "Cnt": 5, "Nome": 38, "Cargo": 34, "Admissão": 11,
+            "Jornada": 10, "Horas semanais": 8, "Tipo sugerido": 15,
+            "Lotação/Secretaria": 36, "Erro": 30}
+    for j, c in enumerate(df.columns, 1):
+        ws.column_dimensions[get_column_letter(j)].width = larg.get(c, 22)
+    ws.auto_filter.ref = ws.dimensions
+    wf = wb["Fichas"]
+    for j, w_ in enumerate([10, 5, 38, 120], 1):
+        wf.column_dimensions[get_column_letter(j)].width = w_
+    for n in range(2, wf.max_row + 1):
+        wf.cell(n, 4).alignment = Alignment(wrap_text=True, vertical="top")
+
+    # ---- CARGA: as linhas no formato exato da aba CARGA da Divisão
+    bons = [r for r in registros if not r.get("Erro")]
+    _aba_carga_divisao(wb, bons, ano, mes, cfg, regras)
+    wb.save(destino)
+
+    arquivos = {"excel": destino, "conferencia": None}
+    if salvar_conferencia:
+        # o cálculo junta por matrícula: com 2 contratos, vale o admitido por último
+        escolhidos = {}
+        for r in registros:
+            m = str(r.get("Matrícula"))
+            atual = escolhidos.get(m)
+            d = rb.parse_data(r.get("Admissão")) if r.get("Admissão") else None
+            da = rb.parse_data(atual.get("Admissão")) if atual and atual.get("Admissão") else None
+            if atual is None or (atual.get("Erro") and not r.get("Erro")) or \
+                    (not r.get("Erro") and d and (da is None or d > da)):
+                escolhidos[m] = r
+        conf = pd.DataFrame([{
+            "Matrícula": r.get("Matrícula"), "Nome": r.get("Nome", ""),
+            "Data de admissão": r.get("Admissão", ""), "Cargo": r.get("Cargo", ""),
+            "Jornada": r.get("Horas semanais", ""),
+            "Secretaria": r.get("Lotação/Secretaria", ""), "Erro": r.get("Erro", "")}
+            for r in escolhidos.values()])
+        alvo = pasta_entrada(cfg) / "conferencia_abaco.xlsx"
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        conf.to_excel(alvo, index=False)
+        arquivos["conferencia"] = alvo
+        ui.log(f"Conferência para o cálculo do VR: {alvo}")
+    return arquivos
 
 
 # ---- CALCULAR VR/VA DA COMPETÊNCIA

@@ -53,38 +53,70 @@ INICIAR.bat -Reinstalar     apaga o ambiente e instala tudo de novo
 ### Programa sem Python (AutomacaoAbaco.exe)
 
 Para usar em computadores **sem Python instalado**, gere o programa
-empacotado. Faça isso **uma vez** num computador que já abriu pelo
-`INICIAR.bat`:
+empacotado. Faça isso num computador que já abriu pelo `INICIAR.bat`:
 
 1. Dois cliques no **`empacotar.bat`**. Ele confere o ambiente, instala o
-   PyInstaller, gera o programa, testa e compacta. Leva de 2 a 5 minutos.
-2. O resultado fica em **`dist\AutomacaoAbaco\`**, com o
-   **`AutomacaoAbaco.exe`**, e em **`dist\AutomacaoAbaco.zip`**.
-3. Copie a pasta `AutomacaoAbaco` inteira (ou extraia o .zip) para outro
-   computador, na **Área de Trabalho ou em Documentos**, e abra o
-   **`AutomacaoAbaco.exe`**. Não precisa instalar nada.
+   PyInstaller, gera o programa e testa. Leva de 3 a 6 minutos.
+2. O resultado é **um arquivo só**: **`dist\AutomacaoAbaco.exe`**. O Python,
+   as bibliotecas, o motor do navegador e o **`config.json`** desta pasta
+   vão **dentro** dele (não há mais pasta `_internal`).
+3. Para outro computador, copie **só o `AutomacaoAbaco.exe`** para a **Área
+   de Trabalho ou Documentos** e abra. Não precisa instalar nada.
 
-Nos outros computadores:
+Como funciona por dentro e o que muda:
 
-- `config.json`, `entrada\` e `saida\` ficam **dentro da pasta do
-  programa**. O `config.json` copiado leva o endereço da Ábaco, os valores e
-  as regras.
+- Ao abrir, o `.exe` se descompacta numa pasta temporária do Windows e a
+  apaga ao fechar. Por isso **demora alguns segundos a mais para abrir** do
+  que a versão em pasta.
+- Na 1ª vez, ele cria **ao lado dele** o `config.json` (cópia do embutido) e,
+  quando usadas, as pastas `entrada\` e `saida\`. Depois disso vale o
+  `config.json` de fora: o que você mudar em Configurações fica salvo nele.
+  Para voltar ao embutido, apague o `config.json` de fora.
+- Mudou o `config.json` desta pasta (endereço, valores, regras) e quer
+  que vá para dentro do `.exe`? Rode o `empacotar.bat` de novo.
+- O fluxo gravado (`fluxo_gravado.py`, com a senha) **não** vai dentro do
+  `.exe`: grave no próprio computador (Diagnóstico > Gravar fluxo) ou copie
+  o arquivo para o lado do `.exe`.
 - O robô usa o **Microsoft Edge** do Windows. O Chromium é opcional
-  (tela Instalação > "Baixar o navegador controlado").
-- **`VERIFICAR.bat`**, que vai junto, confere se o programa funciona naquele
-  computador sem abrir a tela, e grava o resultado em `verificacao.txt`.
-- Não coloque a pasta em `C:\Arquivos de Programas`: lá o programa não
-  consegue gravar as planilhas.
-- Sempre que o programa for atualizado, rode o `empacotar.bat` de novo e
-  redistribua a pasta.
-- Se o antivírus barrar o `.exe`, peça ao TI para liberar a pasta (é comum
-  com programas gerados pelo PyInstaller).
+  (tela Instalação > "Baixar o navegador controlado", uns 300 MB, em
+  `%LOCALAPPDATA%\ms-playwright`). O download usa o **proxy** e os
+  **certificados do Windows**; se a rede bloquear, o registro explica o
+  motivo (certificado, proxy, sem conexão, pasta bloqueada) e o robô segue
+  com o Edge. Endereços que o TI precisa liberar: `cdn.playwright.dev` e
+  `playwright.download.prss.microsoft.com`.
+- `VERIFICAR.bat`, se colocado ao lado do `.exe`, confere se o programa
+  funciona naquele computador sem abrir a tela (grava `verificacao.txt`).
+- Não coloque o `.exe` em `C:\Arquivos de Programas`: lá ele não consegue
+  gravar o `config.json` e as planilhas.
+- Se o antivírus barrar o `.exe`, peça ao TI para liberá-lo (é comum com
+  programas gerados pelo PyInstaller, e um pouco mais com os de arquivo
+  único).
+- A pasta antiga `dist\AutomacaoAbaco\` (com `_internal`) não é mais usada;
+  copie dela o que for seu (fluxos, saída) antes de apagá-la.
 
 ---
 
 ## As telas
 
-A barra da esquerda leva às telas. Embaixo de todas fica o **Registro**,
+O visual segue o arquivo do Figma **"Automação - Fluxos RH (telas)"**
+(https://www.figma.com/design/AwhN1qt75rIHVIc7azbUdC): fonte IBM Plex Sans
+(e IBM Plex Mono no Registro), embutida em `fontes/`; cada setor tem a sua
+cor (Benefícios em azul, Consulta de Admissões em areia). As cores e a folha
+de estilo ficam em `tema.py`.
+
+O programa abre na **tela inicial** ("Automação - Fluxos RH"), com os dois
+setores. Cada setor mostra **só as funções dele**:
+
+| Na tela inicial | O que aparece |
+|---|---|
+| **Benefícios VR/VA** (azul) | Benefícios VR/VA (os 3 passos do mês), Resultados e Visão geral |
+| **Consulta de Admissões** (bege) | a tela Consulta de admissões |
+| **Engrenagem** (canto de baixo) | **Modo desenvolvedor**: todas as funções do programa, agrupadas (Benefícios VR/VA, Consulta de Admissões e Ferramentas: Configurações, Instalação, Diagnóstico), inclusive o robô antigo de conferência na Ábaco e a configuração do robô |
+
+O botão **← Início**, no alto, volta para a tela inicial (uma tarefa em
+andamento continua rodando).
+
+Dentro do setor, a barra da esquerda leva às telas dele. Embaixo de todas fica o **Registro**,
 que mostra tudo o que o programa está fazendo. Tarefas que usam o
 navegador rodam em segundo plano, e a barra de status mostra a tarefa em
 andamento com um botão **Cancelar tarefa**.
@@ -93,7 +125,7 @@ Quando o robô precisa da pessoa ("faça login", "baixou o relatório?"),
 aparece um **painel destacado com botões** acima do registro. A tela
 nunca trava.
 
-### Início
+### Visão geral (setor Benefícios)
 Situação do programa: bibliotecas, navegador, endereço da Ábaco, valores
 de VR/VA e robô de consulta. Cada item mostra ✔ ou ⚠ com o que fazer.
 Também mostra a rotina do mês.
@@ -163,6 +195,68 @@ anterior**, como a Divisão faz:
 
 Os detalhes e a fonte de cada regra estão em
 [REGRAS_DE_NEGOCIO.md](REGRAS_DE_NEGOCIO.md).
+
+### Consulta de admissões
+
+Faz em lote o que o `fluxo_consulta_admissao.py` fazia para uma matrícula:
+entra no e-Turmalina (sozinho, se a senha está no fluxo gravado), abre
+**GESTÃO DE PESSOAS > Dados Funcionais do Servidor**, digita cada matrícula,
+clica em **Consultar**, lê a linha da grade (Matrícula, Cnt, Servidor, Cargo)
+e abre o ícone **Eventos funcionais do servidor** para ler a ficha (Dados da
+nomeação, Dados do cargo: admissão, jornada, lotação...). **Só consulta.**
+
+- **Matrículas**: uma por linha; `22769;2` consulta só o contrato 2. Sem o
+  contrato, lê todos os contratos da matrícula. Botões:
+  - **Puxar matrículas do SIGA**: o robô entra no SIGA
+    (`https://mgnl.abaco.com.br/siga/`), abre **Recursos Humanos > Relação
+    de Servidores Admitidos no Período** (visão salva 245), preenche DATA
+    ADMISSÃO INICIAL = dia 1º do **mês atual** e FINAL = **hoje** (o dia em
+    que o botão é usado: em 25/12, de 01/12 a 25/12), clica em Visualizar
+    Resultado e exporta em **XLSX(SEM FORMATO)** (se a exportação não baixar,
+    lê a tabela da tela, página por página). O arquivo fica em
+    `entrada\siga_admitidos_AAAA-MM-DD_a_AAAA-MM-DD.xlsx`. Entram na lista os
+    admitidos que **não estão na planilha base**; os da **Educação** ficam de
+    fora (vão para a SEMED). O registro mostra quantos ficaram de fora e por quê.
+    **Faz também o que o programa da pasta "003 - GILSON" faz**: grava a
+    `admissoes.xlsx` (na pasta do programa) no mesmo formato. A aba
+    **Planilha** recebe MAT, NOME, SITUAÇÃO, TIPO, TOTAL DEDUÇÕES, QTDE, VALOR,
+    DESCONTO, TOTAL, REEMBOLSO e OBSERVAÇÃO, com cabeçalho Segoe UI azul e
+    filtro. Cada admitido entra nas próximas linhas vazias com TIPO NORMAL,
+    TOTAL DEDUÇÕES 0, QTDE 19, VALOR 56, DESCONTO 0, TOTAL `=F*G-(E*G)` e
+    REEMBOLSO 0. A aba Admissoes_Extraidas é apagada, a planilha abre no Excel
+    na aba Planilha com as linhas novas selecionadas, e todos os admitidos do
+    SIGA entram nela. Diferença: quem já está na planilha não é repetido (o
+    programa do Gilson repete a cada clique). Se a admissoes.xlsx estiver
+    aberta no Excel, o botão avisa antes de abrir o navegador. Nome do
+    arquivo, QTDE, VALOR e abrir no Excel ficam em Configurações > Geral;
+  - **Gravar login do SIGA**: uma vez só. Faça o login e feche o navegador; o
+    login (com a senha) fica em `fluxo_siga.py` e o robô entra sozinho. Outra
+    opção, como no programa do Gilson: escrever **Usuário e Senha do SIGA** em
+    Configurações > Geral (ficam no config.json). Sem nenhum dos dois, o robô
+    espera você fazer o login no navegador que abrir;
+  - **Do relatório do SIGA na entrada**: usa o relatório "situação de
+    afastamento" que já está em `entrada\servidores` (sem abrir o SIGA);
+  - **Carregar de planilha...**: a coluna MAT/Matrícula de qualquer aba.
+- **Resultado**: `saida\consultas\consulta_admissoes_AAAA-MM-DD_HHMM.xlsx`,
+  com 3 abas:
+  - **CARGA** (abre nela): **o mesmo formato da aba CARGA da planilha da
+    Divisão** — cabeçalho INICIO/FIM/FERIADOS, TOTAL (dias úteis) em I3,
+    valores por tipo em K2:L5, tabela `Tabela3` a partir da linha 7 com MAT,
+    NOME, SITUAÇÃO, TIPO, (DEDUÇÃO ATESTATO, DE FALTAS e DE FÉRIAS ocultas),
+    TOTAL DEDUÇÕES, QTDE (laranja), VALOR, DESCONTO, TOTAL, REEMBOLSO,
+    OBSERVAÇÃO e Coluna1, Calibri 8, moeda contábil e as **mesmas fórmulas**.
+    O TIPO vem da jornada semanal (200/40 → 40 h → NORMAL) e a OBSERVAÇÃO diz
+    a admissão e a jornada; confira o limite salarial do DIFERENCIADO e a
+    complementar. Dá para copiar as linhas e colar na CARGA do mês;
+  - **Consultas**: uma linha por matrícula e contrato, com todos os campos
+    lidos (`Ficha: ...` e `Grade: ...`); linhas com erro em laranja;
+  - **Fichas**: o texto de cada ficha, para conferir.
+- **Usar no cálculo do VR** (marcado): grava também
+  `entrada\conferencia_abaco.xlsx`. No cálculo, admissão, cargo, jornada e
+  secretaria da Ábaco prevalecem sobre o SIGA e cada diferença vira pendência.
+  Com dois contratos, vale o admitido por último.
+- Se uma matrícula der erro (não existe, a ficha não abriu), o robô anota e
+  segue para a próxima. Se cancelar no meio, o Excel sai com o que já foi lido.
 
 ### Resultados
 Abre sozinha depois do cálculo. Traz o total do VR, os números-resumo, os
@@ -291,7 +385,9 @@ citados na reunião: 19 dias úteis em novembro/2026 e 22 em dezembro):
 | Arquivo | Para que serve |
 |---|---|
 | `INICIAR.bat` | **abre o programa** (instala o que faltar, inclusive o Python) |
-| `empacotar.bat` | gera o programa que roda **sem Python** (`dist\AutomacaoAbaco\AutomacaoAbaco.exe`) |
+| `empacotar.bat` | gera o programa que roda **sem Python**, em um arquivo só (`dist\AutomacaoAbaco.exe`) |
+| `tema.py` | cores, fontes e folha de estilo do Qt (o visual do Figma) |
+| `fontes\` | IBM Plex Sans e Mono (licença SIL OFL), embutidas no programa |
 | `AutomacaoAbaco.spec` | receita do PyInstaller usada pelo `empacotar.bat` |
 | `VERIFICAR.bat` | vai junto com o .exe: confere o programa sem abrir a tela |
 | `instalar.ps1` | o instalador chamado pelo `INICIAR.bat` |

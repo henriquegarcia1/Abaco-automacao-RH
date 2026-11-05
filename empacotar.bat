@@ -3,15 +3,15 @@ setlocal
 rem ==========================================================================
 rem  EMPACOTAR - gera o programa que roda SEM Python instalado
 rem ==========================================================================
-rem  Resultado: dist\AutomacaoAbaco\AutomacaoAbaco.exe (mais a pasta _internal)
-rem             dist\AutomacaoAbaco.zip  (o mesmo, compactado, para distribuir)
-rem  Rode neste computador (que ja tem o ambiente do programa). Leva de 2 a 5
-rem  minutos. Rode de novo sempre que o programa for atualizado.
+rem  Resultado: dist\AutomacaoAbaco.exe  (UM arquivo so: Python, bibliotecas,
+rem             motor do navegador e config.json padrao vao dentro dele)
+rem  Rode neste computador (que ja tem o ambiente do programa). Leva de 3 a 6
+rem  minutos. Rode de novo sempre que o programa ou o config.json mudar.
 rem ==========================================================================
 title Empacotar Automacao Abaco
 pushd "%~dp0"
 
-echo [1/5] Conferindo o ambiente do programa (Python e bibliotecas)...
+echo [1/4] Conferindo o ambiente do programa (Python e bibliotecas)...
 call "%~dp0INICIAR.bat" -SoInstalar
 if errorlevel 1 goto :erro
 
@@ -22,48 +22,58 @@ if not exist "%PY%" (
 )
 
 echo.
-echo [2/5] Instalando o PyInstaller no ambiente do programa...
+echo [2/4] Instalando o PyInstaller no ambiente do programa...
 "%PY%" -m pip install --disable-pip-version-check --prefer-binary --no-input "pyinstaller>=6.10"
 if errorlevel 1 goto :erro
 
 echo.
-echo [3/5] Gerando o programa (2 a 5 minutos)...
-if exist "%~dp0dist\AutomacaoAbaco" rmdir /s /q "%~dp0dist\AutomacaoAbaco"
-"%PY%" -m PyInstaller --noconfirm --clean --distpath "%~dp0dist" --workpath "%TEMP%\AutomacaoAbaco_build" "%~dp0AutomacaoAbaco.spec"
+echo [3/4] Gerando o programa em arquivo unico (3 a 6 minutos)...
+set "SAIDA=%TEMP%\AutomacaoAbaco_dist"
+if exist "%SAIDA%" rmdir /s /q "%SAIDA%"
+"%PY%" -m PyInstaller --noconfirm --clean --distpath "%SAIDA%" --workpath "%TEMP%\AutomacaoAbaco_build" "%~dp0AutomacaoAbaco.spec"
 if errorlevel 1 goto :erro
-
-set "DEST=%~dp0dist\AutomacaoAbaco"
-copy /y "%~dp0README.md" "%DEST%\" >nul
-copy /y "%~dp0REGRAS_DE_NEGOCIO.md" "%DEST%\" >nul
-copy /y "%~dp0VERIFICAR.bat" "%DEST%\" >nul
-rem as configuracoes (endereco da Abaco, valores, regras) vao junto
-if exist "%~dp0config.json" copy /y "%~dp0config.json" "%DEST%\" >nul
+if not exist "%SAIDA%\AutomacaoAbaco.exe" (
+    echo [ERRO] O PyInstaller nao gerou o AutomacaoAbaco.exe.
+    goto :erro
+)
 
 echo.
-echo [4/5] Conferindo o programa gerado...
-start "" /wait "%DEST%\AutomacaoAbaco.exe" --verificar
+echo [4/4] Conferindo o programa gerado...
+rem confere numa pasta vazia: assim o teste usa o config.json de DENTRO do .exe
+start "" /wait "%SAIDA%\AutomacaoAbaco.exe" --verificar
 set "CODIGO=%ERRORLEVEL%"
-if exist "%DEST%\verificacao.txt" (
-    type "%DEST%\verificacao.txt"
-    del "%DEST%\verificacao.txt"
-)
+if exist "%SAIDA%\verificacao.txt" type "%SAIDA%\verificacao.txt"
 if not "%CODIGO%"=="0" (
     echo [ERRO] A verificacao do programa gerado encontrou problemas. Veja acima.
     goto :erro
 )
 
-echo.
-echo [5/5] Compactando para distribuir...
-if exist "%~dp0dist\AutomacaoAbaco.zip" del "%~dp0dist\AutomacaoAbaco.zip"
-powershell -NoProfile -Command "Compress-Archive -Path '%DEST%' -DestinationPath '%~dp0dist\AutomacaoAbaco.zip'"
-if errorlevel 1 echo Nao consegui gerar o .zip; a pasta dist\AutomacaoAbaco esta pronta mesmo assim.
+if not exist "%~dp0dist" mkdir "%~dp0dist"
+copy /y "%SAIDA%\AutomacaoAbaco.exe" "%~dp0dist\AutomacaoAbaco.exe" >nul
+if errorlevel 1 (
+    echo [ERRO] Nao consegui gravar dist\AutomacaoAbaco.exe. Feche o programa
+    echo        se ele estiver aberto e rode de novo.
+    goto :erro
+)
+rmdir /s /q "%SAIDA%" 2>nul
 
 echo.
 echo ==========================================================================
-echo  PRONTO. Programa em: dist\AutomacaoAbaco\AutomacaoAbaco.exe
-echo  Para outro computador: copie a pasta dist\AutomacaoAbaco inteira (ou o
-echo  dist\AutomacaoAbaco.zip, extraido) para a Area de Trabalho ou Documentos
-echo  e abra o AutomacaoAbaco.exe. Nao precisa instalar Python.
+echo  PRONTO. Programa em: dist\AutomacaoAbaco.exe  (um arquivo so)
+echo  Para outro computador: copie SO o AutomacaoAbaco.exe para a Area de
+echo  Trabalho ou Documentos e abra. Nao precisa instalar Python.
+echo  Na 1a vez ele cria, ao lado dele, o config.json (copia do embutido) e as
+echo  pastas entrada e saida.
+if exist "%~dp0dist\AutomacaoAbaco\AutomacaoAbaco.exe" (
+    echo.
+    echo  A pasta antiga dist\AutomacaoAbaco ^(com _internal^) nao e mais usada.
+    echo  Antes de apaga-la, copie dela o que for seu ^(fluxos gravados, saida^).
+)
+if exist "%~dp0dist\config.json" (
+    echo.
+    echo  Atencao: dist\config.json existe e VALE MAIS que o embutido. Apague-o
+    echo  se quiser usar o config.json novo que foi para dentro do .exe.
+)
 echo ==========================================================================
 popd
 pause
