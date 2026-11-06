@@ -57,9 +57,11 @@ empacotado. Faça isso num computador que já abriu pelo `INICIAR.bat`:
 
 1. Dois cliques no **`empacotar.bat`**. Ele confere o ambiente, instala o
    PyInstaller, gera o programa e testa. Leva de 3 a 6 minutos.
-2. O resultado é **um arquivo só**: **`dist\AutomacaoAbaco.exe`**. O Python,
-   as bibliotecas, o motor do navegador e o **`config.json`** desta pasta
-   vão **dentro** dele (não há mais pasta `_internal`).
+2. O resultado é **um arquivo só**: **`dist\AutomacaoAbaco.exe`**. Vão
+   **dentro** dele: o Python, as bibliotecas, o motor do navegador, as
+   fontes, o **`config.json`** desta pasta **junto com os ajustes** feitos na
+   tela Configurações deste computador, e os **fluxos gravados** (login da
+   Ábaco e do SIGA). Não há pasta `_internal` nem arquivo de apoio.
 3. Para outro computador, copie **só o `AutomacaoAbaco.exe`** para a **Área
    de Trabalho ou Documentos** e abra. Não precisa instalar nada.
 
@@ -68,15 +70,22 @@ Como funciona por dentro e o que muda:
 - Ao abrir, o `.exe` se descompacta numa pasta temporária do Windows e a
   apaga ao fechar. Por isso **demora alguns segundos a mais para abrir** do
   que a versão em pasta.
-- Na 1ª vez, ele cria **ao lado dele** o `config.json` (cópia do embutido) e,
-  quando usadas, as pastas `entrada\` e `saida\`. Depois disso vale o
-  `config.json` de fora: o que você mudar em Configurações fica salvo nele.
-  Para voltar ao embutido, apague o `config.json` de fora.
-- Mudou o `config.json` desta pasta (endereço, valores, regras) e quer
-  que vá para dentro do `.exe`? Rode o `empacotar.bat` de novo.
-- O fluxo gravado (`fluxo_gravado.py`, com a senha) **não** vai dentro do
-  `.exe`: grave no próprio computador (Diagnóstico > Gravar fluxo) ou copie
-  o arquivo para o lado do `.exe`.
+- **Nenhum arquivo fica ao lado do `.exe`**, só as pastas `entrada\` e
+  `saida\` (o trabalho do mês), quando usadas. As configurações vêm de
+  dentro do `.exe`.
+- O que alguém mudar em **Configurações** fica guardado **só naquele
+  computador**, em `%LOCALAPPDATA%\AutomacaoAbaco\dados\ajustes.json`, e só
+  as diferenças. O botão **Voltar ao padrão** apaga esses ajustes; **Abrir
+  pasta de dados** mostra a pasta.
+- Na mesma pasta de dados ficam os fluxos gravados novos, o relatório de
+  observação e as capturas de "Reproduzir fluxo".
+- Mudou endereço, valores, regras ou gravou um fluxo novo e quer que vá para
+  dentro do `.exe`? Rode o `empacotar.bat` de novo: ele junta o
+  `config.json` desta pasta com os ajustes e os fluxos deste computador.
+- `.exe` de versão anterior deixou um `config.json` ao lado dele? Ao abrir,
+  o programa passa o que ele tinha de diferente para os ajustes e o renomeia
+  para `config.json.antigo`. Fluxos gravados ao lado do `.exe` também são
+  levados para a pasta de dados.
 - O robô usa o **Microsoft Edge** do Windows. O Chromium é opcional
   (tela Instalação > "Baixar o navegador controlado", uns 300 MB, em
   `%LOCALAPPDATA%\ms-playwright`). O download usa o **proxy** e os
@@ -87,12 +96,38 @@ Como funciona por dentro e o que muda:
 - `VERIFICAR.bat`, se colocado ao lado do `.exe`, confere se o programa
   funciona naquele computador sem abrir a tela (grava `verificacao.txt`).
 - Não coloque o `.exe` em `C:\Arquivos de Programas`: lá ele não consegue
-  gravar o `config.json` e as planilhas.
+  criar as pastas `entrada` e `saida` nem gravar as planilhas.
 - Se o antivírus barrar o `.exe`, peça ao TI para liberá-lo (é comum com
   programas gerados pelo PyInstaller, e um pouco mais com os de arquivo
   único).
 - A pasta antiga `dist\AutomacaoAbaco\` (com `_internal`) não é mais usada;
   copie dela o que for seu (fluxos, saída) antes de apagá-la.
+
+---
+
+## Login (KeyAuth)
+
+Ao abrir, o programa mostra a tela de login antes de tudo. O acesso é
+controlado pelo **KeyAuth** (keyauth.cc), aplicação **abacorh**, ownerid
+`dvtNDlx6N3`, versão **1.0** (a mesma do painel; se mudar lá, mude `VERSAO`
+em `autenticacao.py`).
+
+- **Entrar**: usuário e senha. Se a conta tiver verificação em duas etapas,
+  aparece o campo do código de 6 dígitos. "Lembrar meu usuário" guarda só o
+  usuário, nunca a senha.
+- **Criar conta**: chave de acesso (licença gerada no painel do KeyAuth, em
+  Licenses), usuário e senha (mínimo 6 caracteres, repetida). Depois de criar,
+  já entra.
+- A conta fica presa ao computador (HWID = SID do usuário do Windows, igual
+  ao exemplo oficial). Para usar em outro computador, resete o HWID do
+  usuário no painel.
+- Na tela inicial aparece quem está conectado, até quando vale o acesso e o
+  botão **Sair**, que volta para o login.
+- `autenticacao.py` é o cliente do KeyAuth (feito a partir do `keyauth.py` da
+  pasta `keyauth`, mas sem fechar o programa em caso de erro e com as
+  mensagens em português). Ele confere a assinatura de cada resposta do
+  servidor (pacote `cryptography`). `tela_login.py` é a tela.
+- Sem internet, ou com o servidor do KeyAuth fora, não dá para entrar.
 
 ---
 
@@ -199,7 +234,7 @@ Os detalhes e a fonte de cada regra estão em
 ### Consulta de admissões
 
 Faz em lote o que o `fluxo_consulta_admissao.py` fazia para uma matrícula:
-entra no e-Turmalina (sozinho, se a senha está no fluxo gravado), abre
+espera você entrar no e-Turmalina (o login é sempre feito à mão), abre
 **GESTÃO DE PESSOAS > Dados Funcionais do Servidor**, digita cada matrícula,
 clica em **Consultar**, lê a linha da grade (Matrícula, Cnt, Servidor, Cargo)
 e abre o ícone **Eventos funcionais do servidor** para ler a ficha (Dados da
@@ -229,11 +264,9 @@ nomeação, Dados do cargo: admissão, jornada, lotação...). **Só consulta.**
     programa do Gilson repete a cada clique). Se a admissoes.xlsx estiver
     aberta no Excel, o botão avisa antes de abrir o navegador. Nome do
     arquivo, QTDE, VALOR e abrir no Excel ficam em Configurações > Geral;
-  - **Gravar login do SIGA**: uma vez só. Faça o login e feche o navegador; o
-    login (com a senha) fica em `fluxo_siga.py` e o robô entra sozinho. Outra
-    opção, como no programa do Gilson: escrever **Usuário e Senha do SIGA** em
-    Configurações > Geral (ficam no config.json). Sem nenhum dos dois, o robô
-    espera você fazer o login no navegador que abrir;
+  - **Login**: sempre à mão. O navegador abre na tela do SIGA, você entra
+    com seu usuário e senha, e o robô segue sozinho a partir daí. O programa
+    não guarda usuário nem senha de nenhum sistema;
   - **Do relatório do SIGA na entrada**: usa o relatório "situação de
     afastamento" que já está em `entrada\servidores` (sem abrir o SIGA);
   - **Carregar de planilha...**: a coluna MAT/Matrícula de qualquer aba.
@@ -294,12 +327,19 @@ resolvidas.
   do Playwright escreve o passo a passo em `fluxo_gravado.py`. É assim que
   se descobrem os seletores do robô de consulta. Renomeie o arquivo depois
   de cada gravação (ex.: `fluxo_frequencias.py`), senão a próxima o substitui.
+  **Usuário e senha não ficam no fluxo**: o que for digitado na tela de login
+  é apagado do arquivo ao terminar a gravação (os fluxos antigos são limpos
+  ao abrir o programa). O resto da navegação fica.
+  A página fica **limpa**: o gravador não desenha as caixas vermelhas, azuis e
+  amarelas nem o nome do seletor quando o mouse passa ou algo é clicado, e
+  nem a barra de botões no alto da página. O código gravado aparece na janela
+  do Playwright Inspector, que continua abrindo ao lado. Para voltar ao
+  gravador com o realce, ponha `"gravar_sem_destaque": false` no config.json desta pasta e empacote de novo.
 - **Reproduzir fluxo...**: escolhe um fluxo gravado e o repete num
   navegador visível, para testar a gravação. Roda **rápido**; marque
   **"Reproduzir devagar (para acompanhar)"** para ver passo a passo (pausa de
-  0,6 s entre as ações). Se a senha ficou gravada no fluxo, o robô **faz o
-  login sozinho**; se não (ou se a senha mudou), a pessoa entra à mão e o
-  robô **começa sozinho** assim que ela entra. Cliques soltos dados na tela
+  0,6 s entre as ações). O **login é sempre feito à mão**: a pessoa entra
+  e o robô **começa sozinho** assim que ela entra. Cliques soltos dados na tela
   de login são ignorados.
   Se um item não aparece (submenu que só abre passando o mouse, como
   "Consultas Adicionais por Servidor ▸", ou menu que mudou de lugar), o robô
@@ -397,7 +437,7 @@ citados na reunião: 19 dias úteis em novembro/2026 e 22 em dezembro):
 | `test_regras_beneficios.py` | testes das regras |
 | `REGRAS_DE_NEGOCIO.md` | regras (reunião, POP e planilha), requisitos e pendências |
 | `requirements.txt` | bibliotecas instaladas no ambiente do programa |
-| `config.json` | criado na 1ª vez; configurações e regras |
+| `config.json` | configurações e regras padrão; vai para dentro do `.exe` ao empacotar (os ajustes de cada computador ficam em `%LOCALAPPDATA%\AutomacaoAbaco\dados`) |
 | `entrada/` | relatórios do mês, a planilha do mês anterior e os ajustes |
 | `dist/` | criada pelo `empacotar.bat`: o programa empacotado e o .zip |
 | `saida/AAAA-MM/` | a planilha da Divisão (base do mês seguinte), conferência e importação |
