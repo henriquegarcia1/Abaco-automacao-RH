@@ -36,6 +36,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -56,25 +57,50 @@ def _pasta_navegadores_padrao():
 # %LOCALAPPDATA%\ms-playwright. Fixando a pasta aqui, os dois usam a mesma.
 if not os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(_pasta_navegadores_padrao())
-# config.json, entrada/ e saida/ ficam ao lado do programa (.py ou .exe)
+# entrada/ e saida/ (o trabalho do mês) ficam ao lado do programa (.py ou .exe)
 PASTA = (Path(sys.executable) if EMPACOTADO else Path(__file__)).resolve().parent
+# config.json padrão: no .exe vai DENTRO do programa (pasta temporária do
+# PyInstaller); rodando o .py, é o config.json da pasta (o que será embutido).
 CONFIG = PASTA / "config.json"
-# No .exe de arquivo único, o config.json padrão vai DENTRO do programa
-# (pasta temporária do PyInstaller). O que vale é o que fica ao lado do .exe:
-# na 1ª vez ele é copiado para lá, onde pode ser editado e salvo.
 CONFIG_EMBUTIDO = Path(getattr(sys, "_MEIPASS", PASTA)) / "config.json"
 
 
-def _copiar_config_embutido():
-    if EMPACOTADO and not CONFIG.exists() and CONFIG_EMBUTIDO.is_file() \
-            and CONFIG_EMBUTIDO.resolve() != CONFIG.resolve():
-        try:
-            shutil.copyfile(CONFIG_EMBUTIDO, CONFIG)
-        except OSError:
-            pass    # pasta só de leitura: carregar_config lê o embutido
+def _pasta_dados():
+    """Pasta escondida do programa, fora da pasta do .exe:
+    %LOCALAPPDATA%\\AutomacaoAbaco\\dados (a mesma onde fica o ambiente)."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share")
+    return base / "AutomacaoAbaco" / "dados"
 
 
-_copiar_config_embutido()
+# O que a pessoa muda em Configurações (só as diferenças do embutido), os
+# fluxos gravados e os arquivos de diagnóstico ficam aqui, e não ao lado do .exe.
+DADOS = _pasta_dados()
+AJUSTES = DADOS / "ajustes.json"
+# fluxos gravados que o empacotar.bat colocou dentro do .exe
+FLUXOS_EMBUTIDOS = Path(getattr(sys, "_MEIPASS", PASTA / "__sem_embutidos__")) / "fluxos"
+
+
+def arquivo_de_dados(nome):
+    """Caminho de um arquivo do programa na pasta escondida. Se ele ainda
+    estiver ao lado do .exe (versão antiga), é trazido para cá."""
+    nome = Path(nome)
+    if nome.is_absolute():
+        return nome
+    novo = DADOS / nome
+    if not novo.exists():
+        # versão antiga (ao lado do .exe) ou o que veio embutido no .exe
+        for origem in (PASTA / nome, FLUXOS_EMBUTIDOS / nome):
+            if origem.is_file():
+                try:
+                    novo.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(origem, novo)
+                except OSError:
+                    return origem
+                break
+    return novo
 
 PADRAO = {
     "url_abaco": "https://www.abaco.com.br",   # troque pela URL real
@@ -89,13 +115,12 @@ PADRAO = {
     "url_siga": "https://mgnl.abaco.com.br/siga/default.aspx",
     "siga_consulta_admitidos": "Consulta.aspx?cid=402&ConsultaSalva=245",
     "arquivo_fluxo_siga": "fluxo_siga.py",      # login do SIGA gravado
-    "siga_usuario": "",                        # login do SIGA (se não houver
-    "siga_senha": "",                          #   fluxo gravado)
     # planilha dos admitidos (mesma do programa "003 - GILSON")
     "planilha_admissoes_siga": "admissoes.xlsx",   # na pasta do programa
     "admissoes_qtde": 19,                      # QTDE de cada admitido novo
     "admissoes_valor": 56,                     # VALOR de cada admitido novo
     "abrir_planilha_admissoes": True,          # abre no Excel ao terminar
+    "gravar_sem_destaque": True,               # gravador sem as caixas coloridas
     "pasta_entrada": "entrada",                # relatórios do mês
     "pasta_saida": "saida",                    # planilhas geradas
     # Conferir: seletores da tela de consulta do servidor na Ábaco.
@@ -151,41 +176,138 @@ def mesclar(base, extra):
     return base
 
 
-def carregar_config():
+def config_base():
+    """O padrão do programa: PADRAO + config.json embutido (no .exe) ou da
+    pasta (rodando o .py), com as regras de benefícios completas."""
     cfg = copy.deepcopy(PADRAO)
-    fonte = CONFIG if CONFIG.exists() else \
-        (CONFIG_EMBUTIDO if EMPACOTADO and CONFIG_EMBUTIDO.is_file() else None)
-    if fonte:
+    fonte = CONFIG_EMBUTIDO if EMPACOTADO else CONFIG
+    if fonte.is_file():
         try:
             mesclar(cfg, json.loads(fonte.read_text(encoding="utf-8")))
         except Exception:
-            pass    # config com erro: segue com o padrão (a tela avisa)
+            pass
+    try:
+        import regras_beneficios as rb
+        cfg["beneficios"] = rb.regras_completas(cfg.get("beneficios"))
+    except Exception:
+        pass                      # sem pandas ainda: as regras completam depois
+    return cfg
+
+
+_IGUAL = object()
+
+
+def _diferenca(atual, base):
+    """Só o que mudou em relação ao padrão (dicionários em profundidade)."""
+    if isinstance(atual, dict) and isinstance(base, dict):
+        dif = {}
+        for k, v in atual.items():
+            if k not in base:
+                dif[k] = v
+            else:
+                sub = _diferenca(v, base[k])
+                if sub is not _IGUAL:
+                    dif[k] = sub
+        return dif if dif else _IGUAL
+    return _IGUAL if atual == base else atual
+
+
+def _ler_json(arq):
+    return json.loads(Path(arq).read_text(encoding="utf-8"))
+
+
+def _migrar_config_antigo():
+    """Versões anteriores do .exe deixavam um config.json ao lado dele. O que
+    ele tinha de diferente vira ajuste na pasta escondida, e ele é renomeado
+    para config.json.antigo (o programa não depende mais dele)."""
+    if not EMPACOTADO or not CONFIG.is_file() or CONFIG.resolve() == CONFIG_EMBUTIDO.resolve():
+        return
+    try:
+        antigo = _ler_json(CONFIG)
+    except Exception:
+        return                    # com erro: fica lá, e a tela avisa
+    if not AJUSTES.exists():
+        base = config_base()
+        efetivo = mesclar(copy.deepcopy(base), antigo)
+        if "beneficios" in efetivo:
+            try:
+                import regras_beneficios as rb
+                efetivo["beneficios"] = rb.regras_completas(efetivo["beneficios"])
+            except Exception:
+                pass
+        dif = _diferenca(efetivo, base)
+        if dif is not _IGUAL:
+            DADOS.mkdir(parents=True, exist_ok=True)
+            AJUSTES.write_text(json.dumps(dif, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        CONFIG.replace(CONFIG.with_name("config.json.antigo"))
+    except OSError:
+        pass
+
+
+CREDENCIAIS_ANTIGAS = ("siga_usuario", "siga_senha")
+
+
+def carregar_config():
+    _migrar_config_antigo()
+    cfg = config_base()
+    if AJUSTES.is_file():
+        try:
+            ajustes = _ler_json(AJUSTES)
+            if any(k in ajustes for k in CREDENCIAIS_ANTIGAS):
+                # versão anterior guardava login do SIGA: apaga
+                for k in CREDENCIAIS_ANTIGAS:
+                    ajustes.pop(k, None)
+                AJUSTES.write_text(json.dumps(ajustes, indent=2, ensure_ascii=False),
+                                   encoding="utf-8")
+            mesclar(cfg, ajustes)
+        except Exception:
+            pass    # ajustes com erro: segue com o padrão (a tela avisa)
+    for k in CREDENCIAIS_ANTIGAS:
+        cfg.pop(k, None)
     return cfg
 
 
 def erro_no_config():
-    """Mensagem de erro do config.json, ou "" se estiver ok."""
-    if not CONFIG.exists():
-        return ""
-    try:
-        json.loads(CONFIG.read_text(encoding="utf-8"))
-        return ""
-    except Exception as e:
-        return str(e)
+    """Mensagem de erro dos ajustes salvos, ou "" se estiverem ok."""
+    for arq in (AJUSTES, CONFIG if EMPACOTADO else None):
+        if arq and arq.is_file():
+            try:
+                _ler_json(arq)
+            except Exception as e:
+                return f"{arq.name}: {e}"
+    return ""
 
 
 def salvar_config(cfg):
-    CONFIG.write_text(json.dumps(cfg, indent=2, ensure_ascii=False),
-                      encoding="utf-8")
+    """Grava só o que difere do padrão embutido, na pasta escondida. Sem
+    diferenças, não fica arquivo nenhum."""
+    dif = _diferenca(cfg, config_base())
+    if dif is _IGUAL:
+        try:
+            AJUSTES.unlink()
+        except FileNotFoundError:
+            pass
+        return
+    DADOS.mkdir(parents=True, exist_ok=True)
+    tmp = AJUSTES.with_suffix(".tmp")
+    tmp.write_text(json.dumps(dif, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(AJUSTES)
+
+
+def voltar_ao_padrao():
+    """Apaga os ajustes: volta ao config embutido no programa."""
+    try:
+        AJUSTES.unlink()
+    except FileNotFoundError:
+        pass
 
 
 def regras_do_config(cfg):
-    """Regras de benefícios completas; grava no config.json para edição."""
+    """Regras de benefícios completas (o padrão + o que foi ajustado)."""
     import regras_beneficios as rb
     regras = rb.regras_completas(cfg.get("beneficios"))
-    if cfg.get("beneficios") != regras:
-        cfg["beneficios"] = regras
-        salvar_config(cfg)
+    cfg["beneficios"] = regras
     return regras
 
 
@@ -651,7 +773,8 @@ def observar(cfg, ui):
 
 
 def gerar_relatorio(cfg, eventos, ui):
-    base = PASTA / cfg["relatorio"]
+    base = DADOS / cfg["relatorio"]
+    base.parent.mkdir(parents=True, exist_ok=True)
     (base.with_suffix(".json")).write_text(
         json.dumps(eventos, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -740,22 +863,107 @@ def gerar_relatorio(cfg, eventos, ui):
 # ==========================================================================
 # GRAVAR FLUXO  (depois de decidir automatizar)
 # ==========================================================================
+# O gravador do Playwright desenha caixas vermelhas/azuis/amarelas e o nome
+# do seletor sobre cada elemento que o mouse toca ou que é clicado (e uma barra
+# de botões no alto da página). Tudo isso fica num elemento <x-pw-glass>;
+# escondê-lo não atrapalha a gravação, que escuta os eventos da página.
+CSS_SEM_DESTAQUE = "x-pw-glass{display:none!important}"
+JS_SEM_DESTAQUE = """(() => {
+  const ID = "__fluxos_sem_destaque";
+  const add = () => {
+    if (!document.documentElement) return false;
+    if (document.getElementById(ID)) return true;
+    const s = document.createElement("style");
+    s.id = ID;
+    s.textContent = "%s";
+    (document.head || document.documentElement).appendChild(s);
+    return true;
+  };
+  if (!add()) {
+    const o = new MutationObserver(() => { if (add()) o.disconnect(); });
+    o.observe(document, {childList: true, subtree: true});
+  }
+  document.addEventListener("DOMContentLoaded", add);
+  window.addEventListener("load", add);
+})();""" % CSS_SEM_DESTAQUE
+
+
+def _gravar_sem_destaque(cfg, ui, saida, url):
+    """Gravador do Playwright aberto por aqui (e não pela linha de comando
+    'codegen'), para poder esconder o realce colorido. O arquivo sai igual ao
+    do codegen. Devolve False se esta versão do Playwright não deixar."""
+    sync_playwright = _playwright()
+    with sync_playwright() as p:
+        navegador = abrir_navegador(p, cfg, visivel=True)
+        try:
+            contexto = navegador.new_context()
+            contexto.add_init_script(JS_SEM_DESTAQUE)
+            try:
+                contexto._sync(contexto._impl_obj._channel.send(
+                    "enableRecorder", None,
+                    {"language": "python", "mode": "recording",
+                     "outputFile": str(saida),
+                     "launchOptions": {"headless": False}, "contextOptions": {}}))
+            except Exception as e:
+                ui.log(f"   (gravador interno indisponível: {str(e).splitlines()[0][:120]})")
+                return False
+            pagina = contexto.new_page()
+            try:
+                pagina.goto(url, wait_until="domcontentloaded", timeout=60000)
+            except Exception as e:
+                ui.log(f"   Não abriu {url} sozinho ({str(e).splitlines()[0][:80]}). "
+                       f"Digite o endereço na barra do navegador.")
+            # espera a pessoa fechar o navegador (ou cancelar no programa)
+            while navegador.is_connected() and contexto.pages:
+                if getattr(ui, "cancelado", False):
+                    ui.log("Gravação cancelada.")
+                    break
+                try:
+                    contexto.pages[0].wait_for_timeout(500)
+                except Exception:
+                    time.sleep(0.5)
+            try:
+                contexto.close()             # fecha o arquivo do fluxo
+            except Exception:
+                pass
+        finally:
+            _fechar(navegador)
+    return True
+
+
 def gravar(cfg, ui, arquivo=None, url=None):
     """Abre o gravador do Playwright; devolve o arquivo com o fluxo.
     arquivo/url: outro destino e endereço (ex.: o login do SIGA)."""
     _playwright()
-    saida = PASTA / (arquivo or cfg["arquivo_fluxo"])
+    saida = arquivo_de_dados(arquivo or cfg["arquivo_fluxo"])
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    url = url or cfg["url_abaco"]
     ui.log(f"Gravando em {saida}. Faça login, execute a tarefa UMA vez e "
            f"FECHE o navegador ao terminar.")
+    if cfg.get("gravar_sem_destaque", True):
+        ui.log("O gravador não mostra as caixas coloridas sobre a página; o "
+               "código aparece na janela do Playwright Inspector.")
+        if _gravar_sem_destaque(cfg, ui, saida, url):
+            if limpar_arquivo_de_fluxo(saida):
+                ui.log("Usuário e senha digitados no login foram tirados do fluxo "
+                       "(o login é sempre feito à mão).")
+            if not saida.exists() or "def run(" not in saida.read_text(encoding="utf-8", errors="replace"):
+                raise RuntimeError("A gravação terminou sem nenhum passo gravado.")
+            ui.log(f"Fluxo salvo em: {saida}")
+            return saida
+        ui.log("Usando o gravador padrão (com o realce colorido).")
     comando, env = _comando_playwright("codegen", "--target", "python",
                                        "--output", str(saida))
     canal, nome = navegador_do_windows()
     if canal and not chromium_baixado():
         ui.log(f"Chromium não baixado; gravando com o {nome}.")
         comando += ["--channel", canal]
-    codigo = _rodar(comando + [url or cfg["url_abaco"]], ui, env)
+    codigo = _rodar(comando + [url], ui, env)
     if codigo != 0:
         raise RuntimeError(f"A gravação terminou com problema (código {codigo}).")
+    if limpar_arquivo_de_fluxo(saida):
+        ui.log("Usuário e senha digitados no login foram tirados do fluxo "
+               "(o login é sempre feito à mão).")
     ui.log(f"Fluxo salvo em: {saida}")
     return saida
 
@@ -813,6 +1021,71 @@ def passos_do_fluxo(texto):
     return separar_fluxo(texto)[1]
 
 
+# ---- sem credenciais nos fluxos gravados
+# Usuário e senha dos sistemas não ficam salvos: ao gravar um fluxo (e ao abrir
+# o programa, nos fluxos antigos) os passos que DIGITAM na tela de login são
+# apagados. Cliques e a navegação continuam; o login a pessoa faz à mão.
+_DIGITAR = re.compile(r"\.(fill|type|press_sequentially|set_input_files)\(")
+_CAMPO_SENSIVEL = re.compile(
+    r"vUSULOGIN|vUSUSENHA|txtUsuario|txtSenha|senha|password|passw|usu[aá]rio|"
+    r"login|\bcpf\b", re.I)
+
+
+def sem_credenciais(texto):
+    """Devolve o fluxo sem as linhas que digitam usuário/senha. Apaga toda
+    digitação feita antes do fim da tela de login e, depois dela, a que for
+    num campo de senha/usuário."""
+    linhas = texto.splitlines()
+    marcas = [i for i, l in enumerate(linhas)
+              if l.lstrip().startswith(("page", "with ", "frame", "popup")) and
+              any(m.lower() in l.lower() for m in _LOGIN)]
+    fim_login = max(marcas) if marcas else -1
+    saida = []
+    for i, l in enumerate(linhas):
+        if _DIGITAR.search(l) and (i <= fim_login or _CAMPO_SENSIVEL.search(l)):
+            continue
+        saida.append(l)
+    return "\n".join(saida) + ("\n" if texto.endswith("\n") else "")
+
+
+def limpar_arquivo_de_fluxo(arq):
+    """Tira usuário e senha de um fluxo gravado (no próprio arquivo)."""
+    arq = Path(arq)
+    try:
+        texto = arq.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    limpo = sem_credenciais(texto)
+    if limpo != texto:
+        try:
+            arq.write_text(limpo, encoding="utf-8")
+            return True
+        except OSError:
+            pass
+    return False
+
+
+def limpar_fluxos_salvos(cfg=None):
+    """Na abertura do programa: tira credenciais dos fluxos já gravados
+    (ao lado do programa e na pasta de dados)."""
+    cfg = cfg or PADRAO
+    nomes = {cfg.get("arquivo_fluxo") or "fluxo_gravado.py",
+             cfg.get("arquivo_fluxo_siga") or "fluxo_siga.py"}
+    for pasta in (PASTA, DADOS):
+        for n in list(nomes):
+            for arq in (pasta / n, _nome_corrigido(pasta / n)):
+                if arq.is_file():
+                    limpar_arquivo_de_fluxo(arq)
+        try:
+            for arq in pasta.glob("fluxo*.py"):
+                # só arquivos do gravador do Playwright
+                cab = arq.read_text(encoding="utf-8", errors="replace")[:4000]
+                if "def run(playwright" in cab and "sync_playwright" in cab:
+                    limpar_arquivo_de_fluxo(arq)
+        except OSError:
+            pass
+
+
 def _senha_do_login(login):
     import re as _re
     for c in login:
@@ -836,7 +1109,7 @@ def reproduzir_fluxo(cfg, ui, arquivo=None, esperar_fechar=True, devagar=None):
     sync_playwright = _playwright()
     from playwright.sync_api import expect as _expect
 
-    arq = Path(arquivo) if arquivo else PASTA / cfg["arquivo_fluxo"]
+    arq = Path(arquivo) if arquivo else arquivo_de_dados(cfg["arquivo_fluxo"])
     if not arq.exists():
         raise RuntimeError(f"Fluxo não encontrado: {arq}")
     corrigido = _nome_corrigido(arq)
@@ -859,7 +1132,7 @@ def reproduzir_fluxo(cfg, ui, arquivo=None, esperar_fechar=True, devagar=None):
             return None
     if devagar is None:
         devagar = bool(cfg.get("reproduzir_devagar", False))
-    destino = PASTA / "reproducao"
+    destino = DADOS / "reproducao"
     ui.log(f"Reproduzindo {arq.name}: {len(passos)} passo(s) depois do login"
            f" ({'devagar' if devagar else 'rápido'}).")
     resultado = {"salvos": [], "parou": None, "passos": len(passos),
@@ -973,7 +1246,7 @@ def _gravar_corrigido(arq, login, passos, correcoes):
         "    # ---------------------\n"
         "    context.close()\n"
         "    browser.close()\n")
-    destino.write_text(texto, encoding="utf-8")
+    destino.write_text(sem_credenciais(texto), encoding="utf-8")
     return destino
 
 
@@ -1336,8 +1609,10 @@ def _fazer_login(page, ui, login, minutos=10):
         ui.log("Não apareceu tela de login; seguindo com os passos.")
         return
 
-    senha = _senha_do_login(login)
-    if senha is not None and senha.strip().lower() not in _SENHA_FALSA:
+    # Login é SEMPRE feito pela pessoa: o programa não guarda nem digita
+    # usuário e senha dos sistemas (decisão da Divisão, 06/11/2026).
+    senha = None
+    if senha is not None:
         ui.log("Entrando no sistema com o usuário e a senha gravados...")
         try:
             for c in login:
@@ -1889,15 +2164,8 @@ def _arquivo_livre(arquivo):
 
 
 def _login_siga(cfg):
-    """Login gravado do SIGA; sem ele, usuário e senha das Configurações."""
-    login = _login_do_fluxo(cfg, cfg.get("arquivo_fluxo_siga") or "fluxo_siga.py")
-    usuario = str(cfg.get("siga_usuario") or "").strip()
-    senha = str(cfg.get("siga_senha") or "")
-    if login or not (usuario and senha):
-        return login
-    return [f'page.locator("#ctl00_ContentPlaceHolder1_txtUsuario").fill({usuario!r})',
-            f'page.locator("#ctl00_ContentPlaceHolder1_txtSenha").fill({senha!r})',
-            'page.locator("#ctl00_ContentPlaceHolder1_btnLogar").click()  # Entrar']
+    """O login do SIGA é feito à mão pela pessoa (nada fica gravado)."""
+    return []
 
 
 CAB_ADMISSOES = ["MAT", "NOME", "SITUAÇÃO", "TIPO", "TOTAL DEDUÇÕES", "QTDE",
@@ -2118,18 +2386,7 @@ def _filtrar_admitidos_siga(cfg, arquivo, ini, ano, mes, ui):
 
 
 def _login_do_fluxo(cfg, arquivo=None):
-    """Passos de login do fluxo gravado (para entrar sozinho com a senha que
-    ficou gravada). Sem fluxo, a pessoa faz o login à mão."""
-    original = PASTA / (arquivo or cfg["arquivo_fluxo"])
-    for arq in (_nome_corrigido(original), original):
-        if arq.exists():
-            try:
-                login = separar_fluxo(arq.read_text(encoding="utf-8",
-                                                    errors="replace"))[0]
-                if login:
-                    return login
-            except Exception:
-                pass
+    """O login é sempre feito à mão: nenhum passo de login gravado é usado."""
     return []
 
 
@@ -2818,7 +3075,9 @@ def verificar_instalacao():
          else f"Python {sys.version.split()[0]} ({sys.executable})")
     item("Pasta de dados", os.access(PASTA, os.W_OK), str(PASTA))
     for modulo in ("PySide6.QtWidgets", "pandas", "openpyxl", "xlrd",
-                   "lxml.etree", "playwright.sync_api"):
+                   "lxml.etree", "playwright.sync_api",
+                   "cryptography.hazmat.primitives.asymmetric.ed25519",
+                   "autenticacao", "tela_login"):
         try:
             __import__(modulo)
             item(f"Biblioteca {modulo}", True)

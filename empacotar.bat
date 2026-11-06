@@ -4,9 +4,10 @@ rem ==========================================================================
 rem  EMPACOTAR - gera o programa que roda SEM Python instalado
 rem ==========================================================================
 rem  Resultado: dist\AutomacaoAbaco.exe  (UM arquivo so: Python, bibliotecas,
-rem             motor do navegador e config.json padrao vao dentro dele)
+rem             motor do navegador, config.json + os ajustes feitos na tela
+rem             Configuracoes e os fluxos gravados vao dentro dele)
 rem  Rode neste computador (que ja tem o ambiente do programa). Leva de 3 a 6
-rem  minutos. Rode de novo sempre que o programa ou o config.json mudar.
+rem  minutos. Rode de novo sempre que o programa ou as configuracoes mudarem.
 rem ==========================================================================
 title Empacotar Automacao Abaco
 pushd "%~dp0"
@@ -62,17 +63,20 @@ echo ==========================================================================
 echo  PRONTO. Programa em: dist\AutomacaoAbaco.exe  (um arquivo so)
 echo  Para outro computador: copie SO o AutomacaoAbaco.exe para a Area de
 echo  Trabalho ou Documentos e abra. Nao precisa instalar Python.
-echo  Na 1a vez ele cria, ao lado dele, o config.json (copia do embutido) e as
-echo  pastas entrada e saida.
+echo  Ele nao precisa de nenhum arquivo ao lado: config.json, ajustes e fluxos
+echo  gravados foram para dentro dele. Ao lado so ficam as pastas entrada e
+echo  saida (o trabalho do mes). O que for mudado em Configuracoes fica em
+echo  %%LOCALAPPDATA%%\AutomacaoAbaco\dados, so naquele computador.
 if exist "%~dp0dist\AutomacaoAbaco\AutomacaoAbaco.exe" (
     echo.
     echo  A pasta antiga dist\AutomacaoAbaco ^(com _internal^) nao e mais usada.
-    echo  Antes de apaga-la, copie dela o que for seu ^(fluxos gravados, saida^).
+    echo  Antes de apaga-la, copie dela o que for seu ^(saida^).
 )
 if exist "%~dp0dist\config.json" (
     echo.
-    echo  Atencao: dist\config.json existe e VALE MAIS que o embutido. Apague-o
-    echo  se quiser usar o config.json novo que foi para dentro do .exe.
+    echo  dist\config.json e de uma versao antiga. Ao abrir, o programa traz o
+    echo  que ele tinha de diferente para os ajustes e o renomeia para
+    echo  config.json.antigo. Depois disso pode apaga-lo.
 )
 echo ==========================================================================
 popd

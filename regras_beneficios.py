@@ -162,7 +162,9 @@ COLUNAS = {
     "salario": ["salario", "salario base", "vencimento base", "vencimento"],
     "tipo": ["tipo", "tipo vr", "tipo de vale", "tipo beneficio"],
     "periodo": ["periodo de gozo", "periodo gozo", "periodo",
-                "periodo de ferias"],
+                "periodo de ferias",
+                # "Relatório de Férias X Competência de Pagamento" (e-Turmalina)
+                "periodo do usufruto", "periodo de usufruto"],
     "competencia": ["competencia"],
     "data": ["data", "data falta", "data da falta", "dia"],
     "quantidade": ["quantidade", "qtd", "qtde", "dias", "plantoes",

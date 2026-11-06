@@ -223,6 +223,7 @@ QMenu::item:selected {{ background: {clara}; }}
 /* tela inicial */
 QWidget#telaInicial {{ background: {PAPEL}; }}
 QLabel#saudacao {{ font-size: 15px; color: {TINTA2}; background: transparent; }}
+QLabel#contaLogin {{ color: {TINTA2}; font-size: 13px; }}
 QLabel#dicaInicial {{ font-size: 12px; color: {TINTA3}; background: transparent; }}
 QPushButton#cartaoAzul {{ background: #2B74B5; border: 0; border-radius: 18px; }}
 QPushButton#cartaoAzul:hover {{ background: #3180C3; }}

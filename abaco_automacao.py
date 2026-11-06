@@ -837,7 +837,6 @@ class PaginaAdmissoes(Pagina):
         hl.addWidget(self.mes)
         hl.addWidget(self.ano)
         hl.addSpacing(10)
-        hl.addWidget(botao("Gravar login do SIGA", self.gravar_login_siga))
         hl.addWidget(botao("Puxar matrículas do SIGA", self.do_siga, True))
         self.corpo.addWidget(hero)
 
@@ -919,19 +918,6 @@ class PaginaAdmissoes(Pagina):
                                     "clique em Consultar e extrair para Excel.")
         self.j.executar("Matrículas do SIGA",
                         lambda ui: nucleo.matriculas_do_siga(cfg, ui, ano, mes), fim)
-
-    def gravar_login_siga(self):
-        cfg = self.j.cfg
-        QMessageBox.information(
-            self, "Gravar login do SIGA",
-            "Vai abrir o navegador na tela de login do SIGA. Faça SÓ o login "
-            "(usuário, senha, Entrar) e FECHE o navegador.\n\nO usuário e a senha "
-            f"ficam gravados em {cfg.get('arquivo_fluxo_siga') or 'fluxo_siga.py'}, "
-            "na pasta do programa, para o robô entrar sozinho.")
-        self.j.executar("Gravar login do SIGA",
-                        lambda ui: nucleo.gravar(cfg, ui,
-                                                 cfg.get("arquivo_fluxo_siga") or "fluxo_siga.py",
-                                                 cfg.get("url_siga")))
 
     def novos(self):
         ano, mes = self.competencia()
@@ -1121,7 +1107,7 @@ class PaginaDiagnostico(Pagina):
             "conteúdo copiado nem a senha. Há um aviso '🔴 Observando' na tela o "
             "tempo todo. Ao fechar o navegador, sai um relatório.")
         self.bt_rel = botao("Abrir último relatório", self.abrir_relatorio)
-        md = nucleo.PASTA / f"{self.j.cfg['relatorio']}.md"
+        md = nucleo.DADOS / f"{self.j.cfg['relatorio']}.md"
         self.bt_rel.setEnabled(md.exists())
         lay.addWidget(linha(botao("Começar a observar", self.observar, True), self.bt_rel))
         self.corpo.addWidget(q)
@@ -1177,7 +1163,7 @@ class PaginaDiagnostico(Pagina):
         self.j.executar("Extrair tabela", lambda ui: nucleo.extrair(cfg, ui), fim)
 
     def abrir_relatorio(self):
-        md = nucleo.PASTA / f"{self.j.cfg['relatorio']}.md"
+        md = nucleo.DADOS / f"{self.j.cfg['relatorio']}.md"
         if md.exists():
             nucleo.abrir_no_sistema(md)
 
@@ -1190,10 +1176,10 @@ class PaginaDiagnostico(Pagina):
 
     def reproduzir(self):
         cfg = self.j.cfg
-        padrao = nucleo.PASTA / cfg["arquivo_fluxo"]
+        padrao = nucleo.arquivo_de_dados(cfg["arquivo_fluxo"])
         caminho, _ = QFileDialog.getOpenFileName(
             self, "Qual fluxo reproduzir?",
-            str(padrao if padrao.exists() else nucleo.PASTA),
+            str(padrao if padrao.exists() else nucleo.DADOS),
             "Fluxos gravados (*.py)")
         if not caminho:
             return
@@ -1223,7 +1209,7 @@ class PaginaDiagnostico(Pagina):
                         lambda ui: nucleo.reproduzir_fluxo(cfg, ui, caminho), fim)
 
     def abrir_fluxo(self):
-        f = nucleo.PASTA / self.j.cfg["arquivo_fluxo"]
+        f = nucleo.arquivo_de_dados(self.j.cfg["arquivo_fluxo"])
         if not f.exists():
             QMessageBox.information(self, "Sem fluxo", "Nenhum fluxo gravado ainda.")
         elif sys.platform == "win32":
@@ -1237,8 +1223,9 @@ class PaginaDiagnostico(Pagina):
 # --------------------------------------------------------------------------
 class PaginaConfig(Pagina):
     titulo = "Configurações"
-    descricao = ("Tudo fica salvo no config.json, na pasta do programa. Os itens "
-                 "marcados 'a validar' em REGRAS_DE_NEGOCIO.md se ajustam aqui.")
+    descricao = ("O padrão vem dentro do programa. O que você muda aqui fica "
+                 "guardado só neste computador (pasta de dados do programa), sem "
+                 "arquivo ao lado do .exe.")
     expandir = True
 
     def __init__(self, janela):
@@ -1266,11 +1253,8 @@ class PaginaConfig(Pagina):
         f.addRow("Arquivo do fluxo gravado:", self.fluxo)
         f.addRow("Planilha da extração:", self.planilha)
         f.addRow("Nome do relatório de observação:", self.relatorio)
-        # SIGA: login e a planilha dos admitidos (como no programa do Gilson)
-        self.siga_usuario = QLineEdit()
-        self.siga_senha = QLineEdit()
-        self.siga_senha.setEchoMode(QLineEdit.EchoMode.Password)
-        self.siga_usuario.setPlaceholderText("vazio: usa o login gravado ou você entra à mão")
+        # SIGA: a planilha dos admitidos (como no programa do Gilson). O login
+        # nos sistemas é sempre feito à mão: nada de usuário/senha guardados.
         self.planilha_adm = QLineEdit()
         self.adm_qtde = QSpinBox()
         self.adm_qtde.setRange(0, 31)
@@ -1285,8 +1269,6 @@ class PaginaConfig(Pagina):
         qv.addWidget(QLabel("VALOR (R$)"))
         qv.addWidget(self.adm_valor)
         qv.addStretch(1)
-        f.addRow("Usuário do SIGA:", self.siga_usuario)
-        f.addRow("Senha do SIGA:", self.siga_senha)
         f.addRow("Planilha dos admitidos (SIGA):", self.planilha_adm)
         f.addRow("Cada admitido entra com:", qv)
         f.addRow("", self.abrir_adm)
@@ -1445,9 +1427,24 @@ class PaginaConfig(Pagina):
         self.corpo.addWidget(linha(
             botao("Salvar", self.salvar, True),
             botao("Descartar alterações", self.carregar),
-            botao("Abrir config.json", lambda: nucleo.abrir_no_sistema(nucleo.CONFIG)
-                  if nucleo.CONFIG.exists() else None)))
+            botao("Voltar ao padrão", self.voltar_ao_padrao),
+            botao("Abrir pasta de dados", self.abrir_dados)))
         self.carregar()
+
+    def voltar_ao_padrao(self):
+        if QMessageBox.question(
+                self, "Voltar ao padrão",
+                "Apagar todos os ajustes feitos aqui e voltar às configurações "
+                "que vêm dentro do programa?") != QMessageBox.StandardButton.Yes:
+            return
+        nucleo.voltar_ao_padrao()
+        self.j.cfg = nucleo.carregar_config()
+        self.carregar()
+        self.j.log("Configurações de volta ao padrão do programa.")
+
+    def abrir_dados(self):
+        nucleo.DADOS.mkdir(parents=True, exist_ok=True)
+        nucleo.abrir_no_sistema(nucleo.DADOS)
 
     def _aba(self, w, rotulo, chave):
         self.indices[chave] = self.abas.addTab(rolavel(w), rotulo)
@@ -1466,8 +1463,6 @@ class PaginaConfig(Pagina):
         self.fluxo.setText(cfg["arquivo_fluxo"])
         self.planilha.setText(cfg["planilha"])
         self.relatorio.setText(cfg["relatorio"])
-        self.siga_usuario.setText(str(cfg.get("siga_usuario") or ""))
-        self.siga_senha.setText(str(cfg.get("siga_senha") or ""))
         self.planilha_adm.setText(cfg.get("planilha_admissoes_siga") or "admissoes.xlsx")
         self.adm_qtde.setValue(int(cfg.get("admissoes_qtde", 19) or 0))
         self.adm_valor.setValue(float(cfg.get("admissoes_valor", 56) or 0))
@@ -1546,8 +1541,6 @@ class PaginaConfig(Pagina):
             "arquivo_fluxo": self.fluxo.text().strip() or "fluxo_gravado.py",
             "planilha": self.planilha.text().strip() or "dados.xlsx",
             "relatorio": self.relatorio.text().strip() or "relatorio_observacao",
-            "siga_usuario": self.siga_usuario.text().strip(),
-            "siga_senha": self.siga_senha.text(),
             "planilha_admissoes_siga": self.planilha_adm.text().strip() or "admissoes.xlsx",
             "admissoes_qtde": self.adm_qtde.value(),
             "admissoes_valor": (int(self.adm_valor.value())
@@ -1857,6 +1850,30 @@ class TelaInicial(QWidget):
         eng.setGraphicsEffect(sombra)
         eng.clicked.connect(lambda: janela.entrar("dev"))
         grade.addWidget(eng, 5, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+        # quem está conectado (KeyAuth) e o botão de sair
+        conta = QHBoxLayout()
+        conta.setSpacing(10)
+        self.conta = QLabel("")
+        self.conta.setObjectName("contaLogin")
+        conta.addWidget(self.conta)
+        self.bt_sair = QPushButton("Sair")
+        self.bt_sair.setObjectName("discreto")
+        self.bt_sair.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.bt_sair.setToolTip("Sair da conta e voltar para a tela de login")
+        self.bt_sair.clicked.connect(janela.sair_da_conta)
+        self.bt_sair.hide()
+        conta.addWidget(self.bt_sair)
+        grade.addLayout(conta, 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+
+    def mostrar_conta(self, usuario):
+        if not usuario:
+            self.conta.setText("")
+            self.bt_sair.hide()
+            return
+        vence = usuario.expira_em()
+        self.conta.setText(f"Conectado como <b>{usuario.nome}</b>"
+                           + (f"  <span style='color:#8695A3'>acesso até {vence}</span>" if vence else ""))
+        self.bt_sair.show()
 
 
 class Janela(QMainWindow):
@@ -2048,6 +2065,25 @@ class Janela(QMainWindow):
         total = sum(self.divisor.sizes())
         self.divisor.setSizes([total - 40, 40] if aberto else [total - 130, 130])
 
+    def definir_login(self, ka, usuario):
+        self.keyauth, self.usuario_login = ka, usuario
+        self.inicial.mostrar_conta(usuario)
+        self.setWindowTitle(f"Automação - Fluxos RH  |  {usuario.nome}")
+
+    def sair_da_conta(self):
+        import tela_login
+        ka = getattr(self, "keyauth", None)
+        if ka:
+            ka.sair()
+        self.hide()
+        ka, usuario = tela_login.pedir_login()
+        if not usuario:
+            QApplication.instance().quit()
+            return
+        self.voltar_inicio()
+        self.definir_login(ka, usuario)
+        self.show()
+
     def voltar_inicio(self):
         self.telas.setCurrentIndex(0)
 
@@ -2168,7 +2204,13 @@ def main():
     tema.carregar_fontes()
     app.setFont(QFont(tema.FAMILIA, 10))
     app.setStyleSheet(tema.estilo())
+    nucleo.limpar_fluxos_salvos(nucleo.carregar_config())  # sem senhas gravadas
+    import tela_login                      # login pelo KeyAuth (app "abacorh")
+    ka, usuario = tela_login.pedir_login()
+    if not usuario:
+        sys.exit(0)
     janela = Janela()
+    janela.definir_login(ka, usuario)
     janela.show()
     sys.exit(app.exec())
 
